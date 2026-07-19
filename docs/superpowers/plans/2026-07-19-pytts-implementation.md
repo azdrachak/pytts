@@ -6,7 +6,7 @@
 
 **Architecture:** A linear, dependency-injected pipeline converts an input file into typed article blocks, cleans and expands text, chunks it into SSML, synthesizes each chunk with a runtime-verified Silero adapter, and streams PCM into one atomic LAME writer. A mandatory Phase 0 probes the real model before any article-processing code is implemented; the runtime voice list, model hash, SSML contract, and safe text limit come from that probe.
 
-**Tech Stack:** Python 3.12, uv/uv-build, Typer, Rich, PyMuPDF, markdown-it-py, PyYAML, PyTorch on CPU, platformdirs, lameenc, pytest, pytest-cov, mutagen, Ruff.
+**Tech Stack:** Python 3.12, uv/uv-build, Typer, Click 8.2+, Rich, PyMuPDF, markdown-it-py, PyYAML, PyTorch on CPU, platformdirs, lameenc, pytest, pytest-cov, mutagen, Ruff.
 
 ## Global Constraints
 
@@ -144,6 +144,7 @@ description = "Local Russian article-to-MP3 CLI"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+  "click>=8.2,<9",
   "lameenc",
   "markdown-it-py",
   "platformdirs",
@@ -208,6 +209,7 @@ from pathlib import Path
 
 import pytest
 
+import pytts.silero_probe as probe
 from pytts.silero_probe import choose_max_text_chars, sha256_file
 
 
@@ -386,11 +388,11 @@ def _largest_supported_length(check: Callable[[int], bool]) -> int:
     if not check(low):
         raise RuntimeError("Silero rejects the minimum 64-character SSML probe")
     high = 128
-    while high <= SEARCH_CEILING and check(high):
+    while check(high):
         low = high
-        high *= 2
-    if high > SEARCH_CEILING:
-        raise RuntimeError("Silero length limit was not found below the probe ceiling")
+        if high == SEARCH_CEILING:
+            return SEARCH_CEILING
+        high = min(high * 2, SEARCH_CEILING)
     while high - low > 1:
         middle = (low + high) // 2
         if check(middle):
@@ -436,6 +438,9 @@ def _write_outputs(project_root: Path, result: ProbeResult) -> None:
         yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False), encoding="utf-8"
     )
 
+    verified_limit = (
+        f"at least {result.l_max}" if result.l_max == SEARCH_CEILING else str(result.l_max)
+    )
     report_path = (
         project_root
         / "docs/superpowers/verification/2026-07-19-silero-v5_5-runtime.md"
@@ -457,7 +462,7 @@ def _write_outputs(project_root: Path, result: ProbeResult) -> None:
                 "- apply_tts(text=...): `passed`",
                 "- apply_tts(ssml_text=...) rates: `x-slow, slow, medium, fast, x-fast`",
                 "- Sample rates: `8000, 24000, 48000`",
-                f"- Verified L_max: `{result.l_max}` clean characters",
+                f"- Verified L_max: `{verified_limit}` clean characters",
                 f"- MAX_TEXT_CHARS: `{result.max_text_chars}`",
                 f"- Number pronunciation observation: {result.number_observation}",
                 "",
@@ -536,6 +541,20 @@ def run_probe(project_root: Path) -> ProbeResult:
     _write_outputs(project_root, result)
     return result
 ```
+
+Append ceiling and exact-boundary regression tests to `tests/test_silero_probe.py`:
+
+```python
+def test_largest_supported_length_returns_exact_boundary() -> None:
+    assert probe._largest_supported_length(lambda length: length <= 1000) == 1000
+
+
+def test_largest_supported_length_treats_probe_ceiling_as_success() -> None:
+    assert probe._largest_supported_length(lambda length: True) == probe.SEARCH_CEILING
+```
+
+Reaching `SEARCH_CEILING` is sufficient evidence because the runtime value is capped at 800 clean
+characters; it is not an integration failure.
 
 Create `scripts/probe_silero.py`:
 
@@ -1016,7 +1035,7 @@ print("не читать")
     и этот блок кода тоже не читать
 
 | Колонка | Значение |
-| --- | --- |
+| -- | -- |
 | Код | 42 |
 
 <aside>не читать</aside>
@@ -1034,11 +1053,11 @@ print("не читать")
 
 
 def test_decodes_html_entities_but_ignores_inline_code(tmp_path: Path) -> None:
-    source = _write(tmp_path, "Текст &amp; ещё `rm -rf example`.\n")
+    source = _write(tmp_path, "Текст &amp; ещё \\*важно\\* и `rm -rf example`.\n")
 
     article = MarkdownReader().read(source)
 
-    assert article.blocks[0].text == "Текст & ещё ."
+    assert article.blocks[0].text == "Текст & ещё *важно* и ."
 ````
 
 - [ ] **Step 2: Run the Markdown tests and confirm red**
@@ -1071,7 +1090,7 @@ _FRONT_MATTER = re.compile(r"\A---[ \t]*\n.*?\n---[ \t]*(?:\n|\Z)", re.DOTALL)
 _FOOTNOTE_DEFINITION = re.compile(r"(?m)^\[\^[^]]+\]:.*(?:\n(?: {2,}|\t).*)*")
 _FOOTNOTE_REFERENCE = re.compile(r"\[\^[^]]+\]")
 _TABLE_DELIMITER = re.compile(
-    r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$"
+    r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$"
 )
 
 
@@ -1080,7 +1099,9 @@ def _drop_pipe_tables(text: str) -> str:
     dropped: set[int] = set()
     for index, line in enumerate(lines):
         if _TABLE_DELIMITER.match(line):
-            dropped.update({index - 1, index})
+            if index > 0:
+                dropped.add(index - 1)
+            dropped.add(index)
             cursor = index + 1
             while cursor < len(lines) and "|" in lines[cursor] and lines[cursor].strip():
                 dropped.add(cursor)
@@ -1097,7 +1118,7 @@ def _prepare(text: str) -> str:
 def _inline_text(token: Token) -> str:
     pieces: list[str] = []
     for child in token.children or ():
-        if child.type == "text":
+        if child.type in {"text", "text_special"}:
             pieces.append(child.content)
         elif child.type in {"softbreak", "hardbreak"}:
             pieces.append(" ")
@@ -1200,9 +1221,9 @@ from pytts.readers.pdf import PDFReader
 def _page(document: fitz.Document, number: int) -> None:
     page = document.new_page(width=595, height=842)
     page.insert_text((50, 25), "Сайт · сохранённая статья", fontsize=8)
-    page.insert_text((50, 100), f"Раздел {number}", fontsize=18)
-    page.insert_text((50, 150), "Это основной абзац статьи.", fontsize=11)
-    page.insert_text((50, 180), "- Пункт списка", fontsize=11)
+    page.insert_text((50, 130), f"Раздел {number}", fontsize=18)
+    page.insert_text((50, 180), "Это основной абзац статьи.", fontsize=11)
+    page.insert_text((50, 210), "- Пункт списка", fontsize=11)
     page.insert_text((50, 810), str(number), fontsize=8)
 
 
@@ -1852,14 +1873,31 @@ def test_maps_every_rate_and_escapes_xml(rate: SpeechRate, ssml_rate: str) -> No
     assert chunks[0].pause_after_ms == 350
 
 
-def test_splits_on_sentences_then_punctuation_and_sets_intermediate_pause() -> None:
-    text = "Первое предложение. Второе предложение, с продолжением. Третье."
-    chunks = chunk_article(_article((BlockKind.HEADING, text)), SpeechRate.NORMAL, 25)
+def test_splits_on_sentences_and_sets_intermediate_pause() -> None:
+    text = (
+        "Первое предложение содержит несколько обычных русских слов. "
+        "Второе предложение содержит ещё несколько обычных русских слов. "
+        "Третье предложение завершает проверку."
+    )
+    chunks = chunk_article(_article((BlockKind.HEADING, text)), SpeechRate.NORMAL, 64)
 
     assert len(chunks) >= 3
     assert [chunk.pause_after_ms for chunk in chunks[:-1]] == [120] * (len(chunks) - 1)
     assert chunks[-1].pause_after_ms == 700
-    assert all(len(_plain(chunk.ssml_text)) <= 25 for chunk in chunks)
+    assert all(len(_plain(chunk.ssml_text)) <= 64 for chunk in chunks)
+
+
+def test_long_sentence_prefers_listed_punctuation_before_whitespace() -> None:
+    article = _article(
+        (
+            BlockKind.PARAGRAPH,
+            "Раз два, три четыре пять шесть семь восемь девять десять одиннадцать двенадцать.",
+        )
+    )
+
+    chunks = chunk_article(article, SpeechRate.NORMAL, 64)
+
+    assert _plain(chunks[0].ssml_text) == "Раз два,"
 
 
 def _plain(ssml: str) -> str:
@@ -1914,7 +1952,8 @@ from pytts.domain import Article, BlockKind, SpeechChunk, SpeechRate
 from pytts.errors import InputError
 
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?…])\s+")
-_PREFERRED_BREAK = re.compile(r"[,;:—–-]\s+|\s+")
+_PUNCTUATION_BREAK = re.compile(r"[,;:—–](?:\s+|$)")
+_WHITESPACE_BREAK = re.compile(r"\s+")
 _FINAL_PAUSE = {
     BlockKind.HEADING: 700,
     BlockKind.PARAGRAPH: 350,
@@ -1928,7 +1967,17 @@ def _split_long(text: str, limit: int) -> list[str]:
     remaining = text.strip()
     while len(remaining) > limit:
         window = remaining[: limit + 1]
-        breaks = [match.end() for match in _PREFERRED_BREAK.finditer(window) if match.end() <= limit]
+        preferred = [
+            match.end()
+            for match in _PUNCTUATION_BREAK.finditer(window)
+            if match.end() <= limit
+        ]
+        whitespace = [
+            match.end()
+            for match in _WHITESPACE_BREAK.finditer(window)
+            if match.end() <= limit
+        ]
+        breaks = preferred or whitespace
         if not breaks:
             token = remaining.split(maxsplit=1)[0]
             if len(token) > limit:
@@ -2027,6 +2076,8 @@ git commit -m "feat: build bounded silero ssml chunks"
 - `ModelStore(cache_root: Path | None = None).ensure(spec, validate_package, progress=None) -> Path`
 - `DownloadProgress = Callable[[int, int | None], None]`
 - The runtime SHA is read from the committed manifest, never duplicated as a Python constant.
+- A fresh download is package-validated before atomic placement. A cached file is re-hashed, then
+  opened once by `SileroRuntime.load`; it is not redundantly opened by `ModelStore` first.
 
 - [ ] **Step 1: Write failing manifest and local-download tests**
 
@@ -2113,7 +2164,7 @@ def test_downloads_validates_reports_progress_and_reuses_cache(
     assert first == second == tmp_path / "models/v5_5_ru.pt"
     assert first.read_bytes() == _Handler.payload
     assert not first.with_name(first.name + ".download").exists()
-    assert validations == [first.with_name(first.name + ".download"), first]
+    assert validations == [first.with_name(first.name + ".download")]
     assert seen[-1] == (len(_Handler.payload), len(_Handler.payload))
 
 
@@ -2287,7 +2338,6 @@ class ModelStore:
         if target.exists():
             try:
                 self._verify(target, spec)
-                validate_package(target)
             except ModelError:
                 raise
             except (KeyboardInterrupt, SystemExit):
@@ -2315,7 +2365,9 @@ class ModelStore:
 
 The cache path therefore resolves on macOS to
 `~/Library/Caches/pytts/models/v5_5_ru.pt`. The committed runtime value lives only in YAML and must
-match the Phase 0 report.
+match the Phase 0 report. Re-hashing the roughly 100 MB cached file on every launch is an intentional
+integrity/startup-time tradeoff from the approved design; avoid adding a second package-open on that
+path because `SileroRuntime.load` immediately performs `load_pickle` itself.
 
 - [ ] **Step 4: Run focused tests and Ruff**
 
@@ -2735,7 +2787,8 @@ def test_real_lame_output_has_required_metadata(tmp_path: Path) -> None:
     info = MP3(output).info
     assert info.sample_rate == 48000
     assert info.channels == 1
-    assert info.bitrate_mode == BitrateMode.CBR
+    # lameenc CBR streams commonly omit the Info/Xing tag Mutagen needs to classify the mode.
+    assert info.bitrate_mode in {BitrateMode.CBR, BitrateMode.UNKNOWN}
     assert 90000 <= info.bitrate <= 100000
     assert info.length == pytest.approx(1.0, abs=0.15)
 ```
@@ -2874,8 +2927,9 @@ uv run pytest tests/test_audio.py -v
 uv run ruff check src/pytts/audio.py tests/test_audio.py
 ```
 
-Expected: pytest's real-LAME test proves mono, CBR, 48 kHz, and approximately 96 Kbit/s on its
-temporary output.
+Expected: pytest's real-LAME test proves mono, 48 kHz, and approximately 96 Kbit/s on its temporary
+output. The encoder's fixed `set_bit_rate(96)` contract establishes CBR; Mutagen may report
+`UNKNOWN` when the stream has no Info/Xing header.
 
 - [ ] **Step 6: Commit the streaming encoder**
 
@@ -3311,8 +3365,9 @@ def test_list_voices_needs_no_input(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(cli.app, ["--list-voices"])
 
     assert result.exit_code == 0
-    assert "aidar" in result.output
-    assert "xenia" in result.output
+    assert "aidar" in result.stdout
+    assert "xenia" in result.stdout
+    assert result.stderr == ""
 
 
 def test_input_and_list_voices_is_usage_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3320,7 +3375,8 @@ def test_input_and_list_voices_is_usage_error(monkeypatch: pytest.MonkeyPatch) -
     result = runner.invoke(cli.app, ["article.md", "--list-voices"])
 
     assert result.exit_code == 2
-    assert "cannot be used together" in result.output
+    assert "cannot be used together" in result.stderr
+    assert result.stdout == ""
 
 
 def test_conversion_builds_request(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3337,7 +3393,7 @@ def test_conversion_builds_request(monkeypatch: pytest.MonkeyPatch) -> None:
     assert request.voice == "xenia"
     assert request.rate.value == "fast"
     assert request.force
-    assert "article.mp3" in result.output
+    assert "article.mp3" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -3355,7 +3411,7 @@ def test_maps_application_errors(
     result = runner.invoke(cli.app, ["article.md"])
 
     assert result.exit_code == code
-    assert str(error) in result.output
+    assert str(error) in result.stderr
 
 
 def test_debug_prints_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3367,8 +3423,8 @@ def test_debug_prints_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(cli.app, ["article.md", "--debug"])
 
     assert result.exit_code == 4
-    assert "Traceback" in result.output
-    assert "ModelError" in result.output
+    assert "Traceback" in result.stderr
+    assert "ModelError" in result.stderr
 
 
 def test_keyboard_interrupt_returns_130(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3397,7 +3453,9 @@ Add to `pyproject.toml` after `[project]` dependencies:
 pytts = "pytts.cli:app"
 ```
 
-Run `uv lock` after the metadata change.
+Run `uv lock` after the metadata change. The direct `click>=8.2,<9` constraint from Task 1 makes
+independent `CliRunner` stdout/stderr capture part of the declared test contract; `uv.lock` records
+the exact Click version used by these assertions.
 
 - [ ] **Step 4: Implement dependency construction, progress rendering, and command behavior**
 
@@ -3802,6 +3860,8 @@ default.
 The model is cached at `~/Library/Caches/pytts/models/v5_5_ru.pt`. Every use verifies the committed
 SHA-256 from `src/pytts/model_manifest.yaml`; a verified cache works offline. A hash mismatch reports
 the expected and actual values and explains the deliberate manifest-update process.
+The repeat SHA-256 pass reads the roughly 100 MB model and can add a short startup delay; this is the
+intentional integrity tradeoff for the MVP.
 
 ## Abbreviations
 
