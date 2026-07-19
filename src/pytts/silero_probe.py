@@ -131,7 +131,8 @@ def _supports_length(model: Any, speaker: str, rate: str, length: int) -> bool:
         if type(error) is Exception and " ".join(str(error).split()) == LENGTH_REJECTION_MESSAGE:
             return False
         raise
-    return isinstance(audio, torch.Tensor) and audio.ndim == 1 and audio.numel() > 0
+    _validate_mono_pcm(audio, "SSML length probe")
+    return True
 
 
 def _largest_supported_length(check: Callable[[int], bool]) -> int:

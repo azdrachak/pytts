@@ -138,3 +138,19 @@ def test_supports_length_propagates_unrelated_exception(error: Exception) -> Non
 
     with pytest.raises(type(error), match=str(error)):
         probe._supports_length(model, "xenia", "x-slow", 561)
+
+
+class _ReturnsFromApplyTts:
+    def __init__(self, audio: object) -> None:
+        self.audio = audio
+
+    def apply_tts(self, **_: object) -> object:
+        return self.audio
+
+
+@pytest.mark.parametrize("audio", [None, torch.empty(0), torch.ones((2, 3))])
+def test_supports_length_rejects_malformed_successful_output(audio: object) -> None:
+    model = _ReturnsFromApplyTts(audio)
+
+    with pytest.raises(RuntimeError, match="SSML length probe"):
+        probe._supports_length(model, "xenia", "x-slow", 561)
