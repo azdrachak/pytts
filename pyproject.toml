@@ -1,0 +1,38 @@
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12.0"]
+build-backend = "uv_build"
+
+[project]
+name = "pytts"
+version = "0.1.0"
+description = "Local Russian article-to-MP3 CLI"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "click>=8.2,<9",
+  "lameenc",
+  "markdown-it-py",
+  "platformdirs",
+  "pymupdf",
+  "pyyaml",
+  "rich",
+  "torch",
+  "typer",
+]
+
+[dependency-groups]
+dev = [
+  "mutagen",
+  "pytest",
+  "pytest-cov",
+  "ruff",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+markers = ["silero: requires the real cached Silero model"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
