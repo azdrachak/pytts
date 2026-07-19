@@ -32,6 +32,23 @@ def test_explicit_config_replaces_root_config(tmp_path: Path) -> None:
     assert dict(config.abbreviations) == {"ув.": "уважаемый"}
 
 
+def test_relative_explicit_config_is_resolved_from_current_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    current_directory = tmp_path / "working-directory"
+    current_directory.mkdir()
+    (current_directory / "custom.yaml").write_text(
+        'version: 1\nabbreviations:\n  "ув.": "уважаемый"\n', encoding="utf-8"
+    )
+    monkeypatch.chdir(current_directory)
+
+    config = load_config(Path("custom.yaml"), root)
+
+    assert dict(config.abbreviations) == {"ув.": "уважаемый"}
+
+
 @pytest.mark.parametrize(
     "content",
     [
@@ -39,12 +56,60 @@ def test_explicit_config_replaces_root_config(tmp_path: Path) -> None:
         "version: true\nabbreviations: {}\n",
         "version: 1\nunknown: true\nabbreviations: {}\n",
         "version: 1\nabbreviations: []\n",
+        'version: 1\nabbreviations:\n  "ув.": ""\n',
+        'version: 1\nabbreviations:\n  "ув.": null\n',
         'version: 1\nabbreviations:\n  "УВ.": "один"\n  "ув.": "два"\n',
         'version: 1\nabbreviations:\n  "": "пустой"\n',
     ],
 )
 def test_invalid_config_is_rejected(tmp_path: Path, content: str) -> None:
     path = tmp_path / "bad.yaml"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ConfigError):
+        load_config(path, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "version: 1\nversion: 1\nabbreviations: {}\n",
+        'version: 1\nabbreviations:\n  "ув.": "уважаемый"\n  "ув.": "уважаемая"\n',
+    ],
+)
+def test_exact_duplicate_yaml_keys_are_rejected(tmp_path: Path, content: str) -> None:
+    path = tmp_path / "duplicate.yaml"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="duplicate"):
+        load_config(path, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "version: 1\n7: value\nabbreviations: {}\n",
+        "version: 1\n7: value\nunknown: true\nabbreviations: {}\n",
+    ],
+)
+def test_non_string_root_keys_are_config_errors(tmp_path: Path, content: str) -> None:
+    path = tmp_path / "bad-root-key.yaml"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ConfigError):
+        load_config(path, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "version: 1\n",
+        "version: 1\nabbreviations: {}\n  malformed\n",
+        "- version: 1\n",
+    ],
+)
+def test_missing_or_malformed_config_content_is_rejected(tmp_path: Path, content: str) -> None:
+    path = tmp_path / "invalid.yaml"
     path.write_text(content, encoding="utf-8")
 
     with pytest.raises(ConfigError):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Hashable
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -8,6 +9,29 @@ from typing import Mapping
 import yaml
 
 from pytts.errors import ConfigError
+
+
+class DuplicateAwareSafeLoader(yaml.SafeLoader):
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[object, object]:
+        mapping: dict[object, object] = {}
+        for key_node, value_node in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if not isinstance(key, Hashable):
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    "found an unhashable key",
+                    key_node.start_mark,
+                )
+            if key in mapping:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key {key!r}",
+                    key_node.start_mark,
+                )
+            mapping[key] = self.construct_object(value_node, deep=deep)
+        return mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,11 +72,13 @@ def load_config(explicit_path: Path | None, project_root: Path) -> AppConfig:
             raise ConfigError(f"Explicit config does not exist: {path}")
         return AppConfig(MappingProxyType({}))
     try:
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=DuplicateAwareSafeLoader)
     except (OSError, UnicodeError, yaml.YAMLError) as error:
         raise ConfigError(f"Could not read YAML config {path}: {error}") from error
     if not isinstance(loaded, dict):
         raise ConfigError(f"{path}: top level must be a mapping")
+    if not all(isinstance(key, str) for key in loaded):
+        raise ConfigError(f"{path}: top-level field names must be strings")
     unknown = set(loaded) - {"version", "abbreviations"}
     if unknown:
         raise ConfigError(f"{path}: unknown fields: {', '.join(sorted(unknown))}")
