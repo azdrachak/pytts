@@ -5,6 +5,7 @@ import subprocess
 import sys
 import urllib.request
 import wave
+import warnings
 from array import array
 from dataclasses import dataclass
 from hashlib import sha256
@@ -46,6 +47,42 @@ def choose_max_text_chars(l_max: int) -> int:
     if safe_limit < 64:
         raise ValueError("Silero safe clean-text limit must be at least 64 characters")
     return safe_limit
+
+
+def _expected_manifest_digest(project_root: Path) -> str | None:
+    manifest_path = project_root / "src/pytts/model_manifest.yaml"
+    if not manifest_path.exists():
+        return None
+    try:
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+        digest = manifest["model"]["sha256"]
+    except (KeyError, TypeError, yaml.YAMLError) as error:
+        raise RuntimeError("Committed model manifest has no valid SHA-256") from error
+    if not isinstance(digest, str) or len(digest) != 64 or any(
+        character not in "0123456789abcdefABCDEF" for character in digest
+    ):
+        raise RuntimeError("Committed model manifest has no valid SHA-256")
+    return digest.lower()
+
+
+def _select_speaker(speakers: tuple[str, ...]) -> str:
+    if "xenia" in speakers:
+        return "xenia"
+    if not speakers:
+        raise RuntimeError("v5_5_ru exposes no model.speakers")
+    fallback = speakers[0]
+    warnings.warn(
+        f"Preferred speaker xenia is unavailable; using {fallback}",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+    return fallback
+
+
+def _validate_mono_pcm(audio: Any, description: str) -> torch.Tensor:
+    if not isinstance(audio, torch.Tensor) or audio.ndim != 1 or audio.numel() == 0:
+        raise RuntimeError(f"{description} did not return non-empty mono PCM")
+    return audio
 
 
 def _download(url: str, destination: Path) -> None:
@@ -185,29 +222,35 @@ def run_probe(project_root: Path) -> ProbeResult:
     if not model_path.exists():
         _download(MODEL_URL, model_path)
     digest = sha256_file(model_path)
+    expected_digest = _expected_manifest_digest(project_root)
+    if expected_digest is not None and digest != expected_digest:
+        raise RuntimeError(
+            "Cached Silero model SHA-256 mismatch: "
+            f"expected {expected_digest}, got {digest}"
+        )
     model = _load_model(model_path)
 
     speakers = tuple(str(value) for value in getattr(model, "speakers", ()))
-    if not speakers:
-        raise RuntimeError("v5_5_ru exposes no model.speakers")
-    speaker = "xenia" if "xenia" in speakers else speakers[0]
+    speaker = _select_speaker(speakers)
 
-    plain = model.apply_tts(
-        text="Это проверка обычного текстового интерфейса.",
-        speaker=speaker,
-        sample_rate=48000,
+    _validate_mono_pcm(
+        model.apply_tts(
+            text="Это проверка обычного текстового интерфейса.",
+            speaker=speaker,
+            sample_rate=48000,
+        ),
+        "apply_tts(text=...)",
     )
-    if plain.ndim != 1 or plain.numel() == 0:
-        raise RuntimeError("apply_tts(text=...) did not return non-empty mono PCM")
 
     for sample_rate in SAMPLE_RATES:
-        audio = model.apply_tts(
-            text="Проверка частоты дискретизации.",
-            speaker=speaker,
-            sample_rate=sample_rate,
+        _validate_mono_pcm(
+            model.apply_tts(
+                text="Проверка частоты дискретизации.",
+                speaker=speaker,
+                sample_rate=sample_rate,
+            ),
+            f"apply_tts(text=...) at {sample_rate} Hz",
         )
-        if audio.ndim != 1 or audio.numel() == 0:
-            raise RuntimeError(f"Invalid PCM at {sample_rate} Hz")
 
     per_rate_limits = [
         _largest_supported_length(
@@ -224,10 +267,13 @@ def run_probe(project_root: Path) -> ProbeResult:
         "19 июля 2026 года показатель вырос на 15%, сумма составила 1 500 ₽, "
         "а диапазон оказался от 5 до 7 единиц."
     )
-    numbers_audio = model.apply_tts(
-        text=numbers,
-        speaker=speaker,
-        sample_rate=48000,
+    numbers_audio = _validate_mono_pcm(
+        model.apply_tts(
+            text=numbers,
+            speaker=speaker,
+            sample_rate=48000,
+        ),
+        "numbers",
     )
     wav_path = project_root / "artifacts/silero_probe/numbers.wav"
     _write_wav(wav_path, numbers_audio, 48000)
