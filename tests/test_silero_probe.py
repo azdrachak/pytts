@@ -108,3 +108,33 @@ def test_select_speaker_warns_when_xenia_is_unavailable() -> None:
 def test_validate_mono_pcm_rejects_empty_or_non_mono_audio(audio: torch.Tensor) -> None:
     with pytest.raises(RuntimeError, match="numbers"):
         probe._validate_mono_pcm(audio, "numbers")
+
+
+class _RaisesFromApplyTts:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def apply_tts(self, **_: object) -> torch.Tensor:
+        raise self.error
+
+
+def test_supports_length_treats_confirmed_model_message_as_boundary() -> None:
+    model = _RaisesFromApplyTts(
+        Exception("  Model couldn't generate your text, probably it's too long  ")
+    )
+
+    assert not probe._supports_length(model, "xenia", "x-slow", 561)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        Exception("model service unexpectedly disconnected"),
+        RuntimeError(probe.LENGTH_REJECTION_MESSAGE),
+    ],
+)
+def test_supports_length_propagates_unrelated_exception(error: Exception) -> None:
+    model = _RaisesFromApplyTts(error)
+
+    with pytest.raises(type(error), match=str(error)):
+        probe._supports_length(model, "xenia", "x-slow", 561)

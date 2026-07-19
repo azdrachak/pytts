@@ -22,6 +22,7 @@ RATES = ("x-slow", "slow", "normal", "fast", "x-fast")
 SSML_RATES = {"normal": "medium", **{rate: rate for rate in RATES if rate != "normal"}}
 SAMPLE_RATES = (8000, 24000, 48000)
 SEARCH_CEILING = 16384
+LENGTH_REJECTION_MESSAGE = "Model couldn't generate your text, probably it's too long"
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,8 +127,10 @@ def _supports_length(model: Any, speaker: str, rate: str, length: int) -> bool:
             speaker=speaker,
             sample_rate=48000,
         )
-    except Exception:
-        return False
+    except Exception as error:
+        if type(error) is Exception and " ".join(str(error).split()) == LENGTH_REJECTION_MESSAGE:
+            return False
+        raise
     return isinstance(audio, torch.Tensor) and audio.ndim == 1 and audio.numel() > 0
 
 
