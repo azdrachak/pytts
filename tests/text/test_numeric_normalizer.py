@@ -104,3 +104,25 @@ def test_normalizes_degrees_decimals_grouping_and_remaining_integers(
 def test_numeric_normalization_is_idempotent() -> None:
     once = _normalize("В 2026 году было 15–20% и 1 500 ₽.")
     assert _normalize(once) == once
+
+
+@pytest.mark.parametrize("sign", ["-", "−"])
+@pytest.mark.parametrize(
+    ("source_template", "expected"),
+    [
+        ("{}5 °C", "минус пять градусов Цельсия"),
+        ("{}15%", "минус пятнадцать процентов"),
+        ("{}5 ₽", "минус пять рублей"),
+        ("{}3,14", "минус три целых четырнадцать сотых"),
+        ("{}42", "минус сорок два"),
+    ],
+)
+def test_normalizes_ascii_and_unicode_minus_for_numeric_families(
+    sign: str, source_template: str, expected: str
+) -> None:
+    assert _normalize(source_template.format(sign)) == expected
+
+
+@pytest.mark.parametrize("source", ["-$5", "$-5", "−$5", "$−5"])
+def test_normalizes_minus_on_either_side_of_prefix_currency(source: str) -> None:
+    assert _normalize(source) == "минус пять долларов"

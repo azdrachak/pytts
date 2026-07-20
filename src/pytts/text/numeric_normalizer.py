@@ -17,6 +17,7 @@ from pytts.text.russian_numbers import (
 
 _INTEGER = r"(?:\d{1,3}(?: \d{3})+|\d+)"
 _DASH = r"[-–—]"
+_SIGN = r"[-−]"
 _MONTHS = {
     1: "января",
     2: "февраля",
@@ -126,14 +127,18 @@ _PERCENT_RANGE = re.compile(
     rf"(?<!\w)(?P<left>{_INTEGER})\s*{_DASH}\s*(?P<right>{_INTEGER})\s*%(?!\w)"
 )
 _CURRENCY_PREFIX = re.compile(
-    rf"(?<!\w)(?P<currency>[₽$€£])\s*(?P<amount>{_AMOUNT})(?!\w|[.,]\d)"
+    rf"(?<!\w)(?:(?P<outer_sign>{_SIGN})\s*)?(?P<currency>[₽$€£])\s*"
+    rf"(?:(?P<inner_sign>{_SIGN})\s*)?(?P<amount>{_AMOUNT})(?!\w|[.,]\d)"
 )
 _CURRENCY_SUFFIX = re.compile(
-    rf"(?<![\w.,])(?P<amount>{_AMOUNT})\s*"
+    rf"(?<![\w.,])(?:(?P<sign>{_SIGN})\s*)?(?P<amount>{_AMOUNT})\s*"
     rf"(?P<currency>{_CURRENCY_TOKEN})(?!\w)",
     re.IGNORECASE,
 )
-_PERCENT = re.compile(rf"(?<![\w.,])(?P<number>{_INTEGER})\s*%(?!\w)")
+_PERCENT = re.compile(
+    rf"(?<![\w.,])(?:(?P<sign>{_SIGN})\s*)?"
+    rf"(?P<number>{_INTEGER})\s*%(?!\w)"
+)
 _EXPLICIT_RANGE = re.compile(
     rf"(?<!\w)от\s+(?P<left>{_INTEGER})\s+до\s+(?P<right>{_INTEGER})(?!\w)",
     re.IGNORECASE,
@@ -142,13 +147,17 @@ _BARE_RANGE = re.compile(
     rf"(?<![\w-])(?P<left>{_INTEGER})\s*{_DASH}\s*(?P<right>{_INTEGER})(?!\w)"
 )
 _DEGREES = re.compile(
-    rf"(?<!\w)(?P<number>{_INTEGER})\s*°\s*(?P<celsius>[CС])?(?!\w)"
+    rf"(?<!\w)(?:(?P<sign>{_SIGN})\s*)?(?P<number>{_INTEGER})\s*°\s*"
+    rf"(?P<celsius>[CС])?(?!\w)"
 )
 _DECIMAL = re.compile(
-    rf"(?<![\w.,])(?P<integer>{_INTEGER})(?P<separator>[.,])"
+    rf"(?<![\w.,])(?:(?P<sign>{_SIGN})\s*)?"
+    rf"(?P<integer>{_INTEGER})(?P<separator>[.,])"
     r"(?P<fraction>\d{1,2})(?![\w.,])"
 )
-_REMAINING_INTEGER = re.compile(_INTEGER)
+_REMAINING_INTEGER = re.compile(
+    rf"(?<!\w)(?:(?P<sign>{_SIGN})\s*)?(?P<number>{_INTEGER})(?!\w)"
+)
 
 
 def _spoken_date(day: int, month: int, year: int) -> str:
@@ -184,6 +193,10 @@ def _currency_amount_words(raw: str, code: str) -> str:
 def _range_words(left: str, right: str, noun: str | None = None) -> str:
     result = f"от {cardinal(left, case='g')} до {cardinal(right, case='g')}"
     return f"{result} {noun}" if noun else result
+
+
+def _with_sign(words: str, sign: str | None) -> str:
+    return f"минус {words}" if sign else words
 
 
 class NumericNormalizer:
@@ -232,7 +245,14 @@ class NumericNormalizer:
     def _currency_amount(self, match: re.Match[str]) -> str:
         raw_currency = match.group("currency")
         code = _CURRENCY_ALIASES[raw_currency.casefold()]
-        return _currency_amount_words(match.group("amount"), code)
+        outer_sign = match.groupdict().get("outer_sign")
+        inner_sign = match.groupdict().get("inner_sign")
+        sign = match.groupdict().get("sign")
+        signs = [value for value in (outer_sign, inner_sign, sign) if value]
+        if len(signs) > 1:
+            raise InputError(f"Currency amount has multiple signs: {match.group(0)!r}")
+        words = _currency_amount_words(match.group("amount"), code)
+        return _with_sign(words, signs[0] if signs else None)
 
     def _currency_range(self, match: re.Match[str]) -> str:
         raw_currency = match.group("currency")
@@ -249,7 +269,8 @@ class NumericNormalizer:
         raw = match.group("number")
         value = parse_integer(raw)
         forms = ("процент", "процента", "процентов")
-        return f"{cardinal(raw)} {noun_form(value, forms)}"
+        words = f"{cardinal(raw)} {noun_form(value, forms)}"
+        return _with_sign(words, match.group("sign"))
 
     def _explicit_range(self, match: re.Match[str]) -> str:
         return _range_words(match.group("left"), match.group("right"))
@@ -280,10 +301,14 @@ class NumericNormalizer:
         value = parse_integer(raw)
         forms = ("градус", "градуса", "градусов")
         result = f"{cardinal(raw)} {noun_form(value, forms)}"
-        return f"{result} Цельсия" if match.group("celsius") else result
+        if match.group("celsius"):
+            result = f"{result} Цельсия"
+        return _with_sign(result, match.group("sign"))
 
     def _decimal(self, match: re.Match[str]) -> str:
-        return decimal_words(match.group("integer"), match.group("fraction"))
+        words = decimal_words(match.group("integer"), match.group("fraction"))
+        return _with_sign(words, match.group("sign"))
 
     def _remaining_integer(self, match: re.Match[str]) -> str:
-        return cardinal(match.group(0))
+        words = cardinal(match.group("number"))
+        return _with_sign(words, match.group("sign"))
