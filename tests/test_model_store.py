@@ -309,37 +309,60 @@ def test_lock_acquisition_failure_maps_to_model_error(
         ModelStore(cache_root=tmp_path).ensure(_spec(), lambda path: None)
 
 
-def test_lock_release_failure_does_not_mask_a_successful_cache_write(
+def test_lock_key_resolution_failure_maps_to_model_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_resolution(_: Path) -> Path:
+        raise OSError("cache root is unavailable")
+
+    monkeypatch.setattr(Path, "resolve", fail_resolution)
+
+    with pytest.raises(ModelError, match="Could not resolve model cache lock.*unavailable"):
+        ModelStore(cache_root=tmp_path).ensure(_spec(), lambda path: None)
+
+
+class _CloseFailure:
+    def __init__(self, wrapped: object) -> None:
+        self._wrapped = wrapped
+
+    def fileno(self) -> int:
+        return self._wrapped.fileno()
+
+    def close(self) -> None:
+        self._wrapped.close()
+        raise OSError("lock release failed")
+
+
+def _fail_lock_close(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_open = Path.open
+
+    def open_with_failing_lock_close(path: Path, *args: object, **kwargs: object) -> object:
+        wrapped = original_open(path, *args, **kwargs)
+        if path.name.endswith(".lock"):
+            return _CloseFailure(wrapped)
+        return wrapped
+
+    monkeypatch.setattr(Path, "open", open_with_failing_lock_close)
+
+
+def test_lock_close_failure_does_not_mask_a_successful_cache_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     payload = b"package bytes"
-    real_flock = model_store.fcntl.flock
-
-    def fail_only_explicit_unlock(descriptor: int, operation: int) -> None:
-        if operation == model_store.fcntl.LOCK_UN:
-            raise OSError("lock release failed")
-        real_flock(descriptor, operation)
 
     def download(_: str, path: Path, __: object) -> None:
         path.write_bytes(payload)
 
-    monkeypatch.setattr(model_store.fcntl, "flock", fail_only_explicit_unlock)
+    _fail_lock_close(monkeypatch)
     monkeypatch.setattr(ModelStore, "_download", staticmethod(download))
 
     assert ModelStore(cache_root=tmp_path).ensure(_spec(), lambda path: None).read_bytes() == payload
 
 
 @pytest.mark.parametrize("failure", ["network", "integrity", "interrupt"])
-def test_lock_release_failure_does_not_mask_primary_error(
+def test_lock_close_failure_does_not_mask_primary_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
 ) -> None:
-    real_flock = model_store.fcntl.flock
-
-    def fail_only_explicit_unlock(descriptor: int, operation: int) -> None:
-        if operation == model_store.fcntl.LOCK_UN:
-            raise OSError("lock release failed")
-        real_flock(descriptor, operation)
-
     def fail(_: str, path: Path, __: object) -> None:
         if failure == "network":
             raise URLError("offline")
@@ -348,7 +371,7 @@ def test_lock_release_failure_does_not_mask_primary_error(
             return
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(model_store.fcntl, "flock", fail_only_explicit_unlock)
+    _fail_lock_close(monkeypatch)
     monkeypatch.setattr(ModelStore, "_download", staticmethod(fail))
 
     if failure == "network":

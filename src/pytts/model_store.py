@@ -78,7 +78,10 @@ def _validate_spec(spec: ModelSpec) -> None:
 
 
 def _thread_lock_for(target: Path) -> Lock:
-    key = target.resolve()
+    try:
+        key = target.resolve()
+    except OSError as error:
+        raise ModelError(f"Could not resolve model cache lock {target}: {error}") from error
     with _THREAD_LOCKS_GUARD:
         return _THREAD_LOCKS.setdefault(key, Lock())
 
