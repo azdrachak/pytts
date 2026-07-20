@@ -16,8 +16,10 @@ from pytts.tts import VoiceSelection
 class FakeInputReader:
     def __init__(self, text: str = "Ув. автор.") -> None:
         self.text = text
+        self.paths: list[Path] = []
 
     def read(self, path: Path) -> Article:
+        self.paths.append(path)
         return Article(path, (TextBlock(BlockKind.PARAGRAPH, self.text),))
 
 
@@ -188,6 +190,81 @@ def test_force_allows_existing_output_after_preflight(tmp_path: Path) -> None:
 
     assert writers[0].output == output
     assert writers[0].force
+
+
+def test_rejects_existing_directory_output_before_downstream_work(tmp_path: Path) -> None:
+    events: list[ProgressEvent] = []
+    writers: list[FakeWriter] = []
+    runtime_calls: list[object] = []
+    reader = FakeInputReader()
+    pipeline = _pipeline(
+        tmp_path,
+        FakeRuntime(),
+        events,
+        writers,
+        reader=reader,
+        runtime_calls=runtime_calls,
+    )
+    source = tmp_path / "article.md"
+    output = tmp_path / "output.mp3"
+    source.write_text("source", encoding="utf-8")
+    output.mkdir()
+
+    with pytest.raises(InputError, match="must not be a directory"):
+        pipeline.convert(ConversionRequest(source, output_path=output, force=True))
+
+    assert not events
+    assert not reader.paths
+    assert not runtime_calls
+    assert not writers
+
+
+@pytest.mark.parametrize(
+    ("target", "label", "error"),
+    [
+        ("input", "input", RuntimeError("symlink loop")),
+        ("output", "output", OSError("filesystem failure")),
+    ],
+)
+def test_wraps_path_resolution_failures_before_downstream_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+    label: str,
+    error: Exception,
+) -> None:
+    events: list[ProgressEvent] = []
+    writers: list[FakeWriter] = []
+    runtime_calls: list[object] = []
+    reader = FakeInputReader()
+    pipeline = _pipeline(
+        tmp_path,
+        FakeRuntime(),
+        events,
+        writers,
+        reader=reader,
+        runtime_calls=runtime_calls,
+    )
+    source = tmp_path / "article.md"
+    output = tmp_path / "output.mp3"
+    source.write_text("source", encoding="utf-8")
+    failing_path = source if target == "input" else output
+    original_resolve = Path.resolve
+
+    def fail_for_target(path: Path, strict: bool = False) -> Path:
+        if path == failing_path:
+            raise error
+        return original_resolve(path, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", fail_for_target)
+
+    with pytest.raises(InputError, match=rf"Could not resolve {label} path"):
+        pipeline.convert(ConversionRequest(source, output_path=output))
+
+    assert not events
+    assert not reader.paths
+    assert not runtime_calls
+    assert not writers
 
 
 def test_explicit_config_replaces_root_abbreviations(tmp_path: Path) -> None:

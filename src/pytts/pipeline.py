@@ -119,9 +119,20 @@ class ConversionPipeline:
         return self._runtime_factory(self._download_progress)
 
     @staticmethod
-    def _output_path(request: ConversionRequest) -> Path:
+    def _resolved_path(path: Path, label: str) -> Path:
+        try:
+            return path.resolve()
+        except (OSError, RuntimeError) as error:
+            raise InputError(f"Could not resolve {label} path {path}: {error}") from error
+
+    @classmethod
+    def _output_path(cls, request: ConversionRequest) -> Path:
         output = request.output_path or request.input_path.with_suffix(".mp3")
-        if output.resolve() == request.input_path.resolve():
+        resolved_output = cls._resolved_path(output, "output")
+        if resolved_output.is_dir():
+            raise InputError(f"Output path must not be a directory: {output}")
+        resolved_input = cls._resolved_path(request.input_path, "input")
+        if resolved_output == resolved_input:
             raise InputError("Output path must differ from input path")
         if output.suffix.casefold() != ".mp3":
             raise InputError(f"Output path must end in .mp3: {output}")
