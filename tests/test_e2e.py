@@ -83,6 +83,7 @@ def test_markdown_to_audio_contract(tmp_path: Path) -> None:
     )
 
     combined = " ".join(runtime.ssml)
+    assert "Проверка синтеза" in combined
     assert "Уважаемый читатель" in combined
     assert "2026" in combined and "25 %" in combined and "1 500 ₽" in combined
     assert "https://" not in combined

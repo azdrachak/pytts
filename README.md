@@ -72,6 +72,8 @@ synthesis/encoding, and 130 for interruption. `--debug` includes a traceback.
 
 - Russian only. Low Cyrillic content emits a warning but is not blocked; there is no language
   validation.
+- Latin tokens in otherwise Russian input can be rejected by the Silero SSML parser; map them through
+  abbreviations or write them in Cyrillic.
 - PDF requires an existing text layer; there is no OCR.
 - Complex multi-column PDF reading order is not guaranteed; the target is a browser-printed article.
 - PDF headings are a font-size heuristic; uniform browser-print typography gets paragraph pauses.

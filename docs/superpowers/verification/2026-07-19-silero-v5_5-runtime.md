@@ -14,3 +14,12 @@
 - Verified L_max: `560` clean characters
 - MAX_TEXT_CHARS: `448`
 - Number pronunciation observation: Озвученный текст: «июля года показатель вырос на сумма составила а диапазон оказался до единиц»
+
+## Task 13 CLI acceptance follow-up
+
+- The real CLI acceptance run found that the `v5_5_ru` SSML parser rejected the fixture title
+  `Проверка pytts` with a `NoneType` key error. The same Cyrillic-only title and the fixture's
+  `2026`, `25 %`, `3–5`, and `1 500 ₽` chunks synthesized successfully.
+- The smoke fixture now uses `Проверка синтеза`; the network-free E2E test preserves this contract.
+- Re-run the two real acceptance tests with `PYTTS_RUN_SILERO=1 uv run pytest
+  tests/test_silero_integration.py -v`.

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 from mutagen.mp3 import MP3
@@ -37,6 +39,25 @@ def test_real_model_synthesizes_valid_mp3(tmp_path: Path) -> None:
         writer.write_silence(chunk.pause_after_ms)
         writer.commit()
 
+    info = MP3(output).info
+    assert info.sample_rate == 48000
+    assert 90000 <= info.bitrate <= 100000
+    assert info.length > 0.5
+
+
+def test_real_cli_synthesizes_smoke_fixture_to_valid_mp3(tmp_path: Path) -> None:
+    output = tmp_path / "smoke.mp3"
+    source = Path(__file__).parent / "fixtures" / "smoke.md"
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pytts", str(source), "--output", str(output)],
+        cwd=Path(__file__).parents[1],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
     info = MP3(output).info
     assert info.sample_rate == 48000
     assert 90000 <= info.bitrate <= 100000
