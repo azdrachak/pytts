@@ -49,6 +49,13 @@ class SileroRuntime:
             raise ModelError(f"Could not move Silero model to CPU: {error}") from error
 
         try:
+            model.eval()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as error:
+            raise ModelError(f"Could not put Silero model in evaluation mode: {error}") from error
+
+        try:
             raw_speakers = getattr(model, "speakers", None)
             if not isinstance(raw_speakers, (list, tuple)):
                 raise ModelError("Silero model.speakers is missing or invalid")
@@ -115,13 +122,19 @@ class SileroRuntime:
         except Exception as error:
             raise SynthesisError(f"Silero synthesis failed: {error}") from error
 
-        if not isinstance(audio, torch.Tensor) or audio.ndim != 1 or audio.numel() == 0:
+        if not isinstance(audio, torch.Tensor):
             raise SynthesisError("Silero returned non-empty finite mono PCM required")
 
         try:
-            pcm = audio.detach().cpu()
+            pcm = audio.detach().cpu().float()
+            if not isinstance(pcm, torch.Tensor) or pcm.ndim != 1 or pcm.numel() == 0:
+                raise SynthesisError("Silero returned non-empty finite mono PCM required")
+            if pcm.dtype != torch.float32:
+                raise SynthesisError("Silero returned non-empty finite mono PCM required")
             is_finite = bool(torch.isfinite(pcm).all().item())
         except (KeyboardInterrupt, SystemExit):
+            raise
+        except SynthesisError:
             raise
         except Exception as error:
             raise SynthesisError(f"Silero returned non-empty finite mono PCM required: {error}") from error
