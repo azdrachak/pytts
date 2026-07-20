@@ -51,14 +51,14 @@ environment or listening review.
 
 ## Pronunciation normalization follow-up (2026-07-20)
 
-- The final network-free gate reported `291 passed, 3 deselected, 6 warnings in 3.23s`; Ruff
+- The final network-free gate reported `314 passed, 3 deselected, 6 warnings in 3.44s`; Ruff
   reported `All checks passed!`, `uv lock --check` resolved 54 packages successfully, and
   `git diff --check` printed nothing.
 - With `PYTTS_RUN_SILERO=1` and `HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` set to
-  `http://127.0.0.1:9`, the real-model gate reported `3 passed, 291 deselected, 7 warnings in
-  5.13s`. The verified cached model required no download.
-- The supplied Safari browser-print PDF produced `artifacts/acceptance-browser-print.mp3`: 476.38
-  seconds, mono, 48,000 Hz, 96,000 bit/s, and 5,716,512 bytes. No `.mp3.part` remained.
+  `http://127.0.0.1:9`, the real-model gate reported `3 passed, 314 deselected, 7 warnings in
+  5.62s`. The verified cached model required no download.
+- The supplied Safari browser-print PDF produced `artifacts/acceptance-browser-print.mp3`: 477.58
+  seconds, mono, 48,000 Hz, 96,000 bit/s, and 5,730,912 bytes. No `.mp3.part` remained.
 - The complete post-normalization control text was:
   `Проверка произношения`
   `девятнадцатого июля две тысячи двадцать шестого года показатель вырос на пятнадцать процентов, сумма составила одна тысяча пятьсот рублей, а диапазон оказался от пяти до семи единиц.`
