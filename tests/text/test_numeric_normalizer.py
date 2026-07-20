@@ -126,3 +126,30 @@ def test_normalizes_ascii_and_unicode_minus_for_numeric_families(
 @pytest.mark.parametrize("source", ["-$5", "$-5", "−$5", "$−5"])
 def test_normalizes_minus_on_either_side_of_prefix_currency(source: str) -> None:
     assert _normalize(source) == "минус пять долларов"
+
+
+@pytest.mark.parametrize("sign", ["-", "−"])
+@pytest.mark.parametrize("separator", [",", "."])
+@pytest.mark.parametrize("terminator", [".", ",", "»", ")", "]"])
+def test_normalizes_signed_decimal_before_sentence_punctuation(
+    sign: str, separator: str, terminator: str
+) -> None:
+    source = f"{sign}3{separator}14{terminator}"
+    expected = f"минус три целых четырнадцать сотых{terminator}"
+
+    assert _normalize(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("Рост - 15%.", "Рост - пятнадцать процентов."),
+        ("Цена - 5 ₽.", "Цена - пять рублей."),
+        ("Итог - 5 пунктов.", "Итог - пять пунктов."),
+        ("Рост − 15%.", "Рост минус пятнадцать процентов."),
+    ],
+)
+def test_distinguishes_prose_dash_from_numeric_minus(
+    source: str, expected: str
+) -> None:
+    assert _normalize(source) == expected

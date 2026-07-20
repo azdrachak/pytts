@@ -17,7 +17,7 @@ from pytts.text.russian_numbers import (
 
 _INTEGER = r"(?:\d{1,3}(?: \d{3})+|\d+)"
 _DASH = r"[-–—]"
-_SIGN = r"[-−]"
+_SIGN = r"(?:-|−\s*)"
 _MONTHS = {
     1: "января",
     2: "февраля",
@@ -127,16 +127,16 @@ _PERCENT_RANGE = re.compile(
     rf"(?<!\w)(?P<left>{_INTEGER})\s*{_DASH}\s*(?P<right>{_INTEGER})\s*%(?!\w)"
 )
 _CURRENCY_PREFIX = re.compile(
-    rf"(?<!\w)(?:(?P<outer_sign>{_SIGN})\s*)?(?P<currency>[₽$€£])\s*"
-    rf"(?:(?P<inner_sign>{_SIGN})\s*)?(?P<amount>{_AMOUNT})(?!\w|[.,]\d)"
+    rf"(?<!\w)(?P<outer_sign>{_SIGN})?(?P<currency>[₽$€£])\s*"
+    rf"(?P<inner_sign>{_SIGN})?(?P<amount>{_AMOUNT})(?!\w|[.,]\d)"
 )
 _CURRENCY_SUFFIX = re.compile(
-    rf"(?<![\w.,])(?:(?P<sign>{_SIGN})\s*)?(?P<amount>{_AMOUNT})\s*"
+    rf"(?<![\w.,])(?P<sign>{_SIGN})?(?P<amount>{_AMOUNT})\s*"
     rf"(?P<currency>{_CURRENCY_TOKEN})(?!\w)",
     re.IGNORECASE,
 )
 _PERCENT = re.compile(
-    rf"(?<![\w.,])(?:(?P<sign>{_SIGN})\s*)?"
+    rf"(?<![\w.,])(?P<sign>{_SIGN})?"
     rf"(?P<number>{_INTEGER})\s*%(?!\w)"
 )
 _EXPLICIT_RANGE = re.compile(
@@ -147,16 +147,16 @@ _BARE_RANGE = re.compile(
     rf"(?<![\w-])(?P<left>{_INTEGER})\s*{_DASH}\s*(?P<right>{_INTEGER})(?!\w)"
 )
 _DEGREES = re.compile(
-    rf"(?<!\w)(?:(?P<sign>{_SIGN})\s*)?(?P<number>{_INTEGER})\s*°\s*"
+    rf"(?<!\w)(?P<sign>{_SIGN})?(?P<number>{_INTEGER})\s*°\s*"
     rf"(?P<celsius>[CС])?(?!\w)"
 )
 _DECIMAL = re.compile(
-    rf"(?<![\w.,])(?:(?P<sign>{_SIGN})\s*)?"
+    rf"(?<![\w.,])(?P<sign>{_SIGN})?"
     rf"(?P<integer>{_INTEGER})(?P<separator>[.,])"
-    r"(?P<fraction>\d{1,2})(?![\w.,])"
+    r"(?P<fraction>\d{1,2})(?!\w|[.,]\d)"
 )
 _REMAINING_INTEGER = re.compile(
-    rf"(?<!\w)(?:(?P<sign>{_SIGN})\s*)?(?P<number>{_INTEGER})(?!\w)"
+    rf"(?<!\w)(?P<sign>{_SIGN})?(?P<number>{_INTEGER})(?!\w)"
 )
 
 
