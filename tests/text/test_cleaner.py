@@ -23,6 +23,19 @@ def test_normalizes_whitespace_removes_urls_and_drops_empty_blocks() -> None:
     assert result.warning is None
 
 
+def test_removes_embedded_technical_unicode_and_control_artifacts() -> None:
+    result = clean_article(
+        _article("Пр\u00adив\u200bет\u2060, \ufeffмир!\x00\x01 2026 — 15%.")
+    )
+
+    assert result.article.blocks[0].text == "Привет, мир! 2026 — 15%."
+
+
+def test_rejects_article_containing_only_technical_artifacts() -> None:
+    with pytest.raises(InputError, match="no readable text"):
+        clean_article(_article("\u00ad\u200b\u2060\ufeff\x00\x01"))
+
+
 @pytest.mark.parametrize(
     ("text", "warning_fragment"),
     [("12345 — %", "no alphabetic"), ("Mostly English и", "below 70%")],

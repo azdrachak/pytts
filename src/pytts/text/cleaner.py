@@ -8,6 +8,16 @@ from pytts.errors import InputError
 
 _URL = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
 _SPACE = re.compile(r"\s+")
+_TECHNICAL_UNICODE = frozenset("\u00ad\u200b\u2060\ufeff")
+
+
+def _remove_technical_artifacts(text: str) -> str:
+    return "".join(
+        character
+        for character in text
+        if character not in _TECHNICAL_UNICODE
+        and not (unicodedata.category(character) == "Cc" and not character.isspace())
+    )
 
 
 def _warning(text: str) -> str | None:
@@ -31,7 +41,8 @@ def clean_article(article: Article) -> CleaningResult:
     blocks: list[TextBlock] = []
     for block in article.blocks:
         normalized = unicodedata.normalize("NFC", block.text)
-        text = _SPACE.sub(" ", _URL.sub("", normalized)).strip()
+        without_artifacts = _remove_technical_artifacts(normalized)
+        text = _SPACE.sub(" ", _URL.sub("", without_artifacts)).strip()
         if text:
             blocks.append(TextBlock(kind=block.kind, text=text))
     if not blocks:
