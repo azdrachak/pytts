@@ -31,6 +31,12 @@ def test_removes_embedded_technical_unicode_and_control_artifacts() -> None:
     assert result.article.blocks[0].text == "Привет, мир! 2026 — 15%."
 
 
+def test_repairs_safari_mixed_script_artifacts_during_cleanup() -> None:
+    result = clean_article(_article("ĸиевсĸий текст и FР-5."))
+
+    assert result.article.blocks[0].text == "киевский текст и FP-5."
+
+
 def test_rejects_article_containing_only_technical_artifacts() -> None:
     with pytest.raises(InputError, match="no readable text"):
         clean_article(_article("\u00ad\u200b\u2060\ufeff\x00\x01"))

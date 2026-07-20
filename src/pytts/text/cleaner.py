@@ -5,6 +5,7 @@ import unicodedata
 
 from pytts.domain import Article, CleaningResult, TextBlock
 from pytts.errors import InputError
+from pytts.text.confusables import repair_mixed_scripts
 
 _URL = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
 _SPACE = re.compile(r"\s+")
@@ -41,7 +42,8 @@ def clean_article(article: Article) -> CleaningResult:
     blocks: list[TextBlock] = []
     for block in article.blocks:
         normalized = unicodedata.normalize("NFC", block.text)
-        without_artifacts = _remove_technical_artifacts(normalized)
+        repaired = repair_mixed_scripts(normalized)
+        without_artifacts = _remove_technical_artifacts(repaired)
         text = _SPACE.sub(" ", _URL.sub("", without_artifacts)).strip()
         if text:
             blocks.append(TextBlock(kind=block.kind, text=text))
