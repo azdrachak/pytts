@@ -44,6 +44,12 @@ def test_does_not_expand_abbreviations_inside_urls() -> None:
     ) == "Уважаемый https://example.test/ув./docs, господин."
 
 
+def test_does_not_expand_url_even_when_it_is_a_configured_key() -> None:
+    url = "https://example.test/ув."
+
+    assert _expand(url, {url: "замена"}) == url
+
+
 def test_leaves_unicode_ignorecase_match_without_casefolded_key_unchanged() -> None:
     assert _expand("İ. i.", {"i.": "item"}) == "İ. item"
 

@@ -25,6 +25,8 @@ class AbbreviationExpander:
             self._pattern = None
 
     def _replace(self, match: re.Match[str]) -> str:
+        if match.group("url") is not None:
+            return match.group(0)
         source = match.group(0)
         replacement = self._replacements.get(source.casefold())
         if replacement is None:
