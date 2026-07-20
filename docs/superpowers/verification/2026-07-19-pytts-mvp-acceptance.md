@@ -27,8 +27,10 @@ environment or listening review.
   `http://127.0.0.1:9`, and an empty `NO_PROXY`, the real integration test completed with `2 passed`.
   The verified cached model required no download.
 - The actual CLI generated ignored artifacts successfully at `x-slow`, `slow`, `normal`, `fast`, and
-  `x-fast`. Sequential `afplay` playback completed; no subjective listening-quality observation is
-  recorded yet.
+  `x-fast`. Sequential `afplay` playback completed. The user's observation was: «скорость ок,
+  изначальная проблема осталась - пропущены все числа и валюты». The generated speed variants were
+  acceptable and distinguishable, but the original quality problem remains: numbers and currencies are
+  omitted in speech. This is not a successful numeric-normalization result.
 - A synthetic `AtomicMp3Writer` soak encoded 3,600 one-second float32 PCM chunks into a 3,600.02 s
   mono 48 kHz / 96 Kbit/s MP3 of 43,200,288 bytes. `resource.ru_maxrss` was exactly 186.4 MiB at 600,
   1,800, and 3,600 encoded seconds; a repeat exited cleanly. The 41 MiB temporary artifact was removed.
@@ -51,8 +53,6 @@ environment or listening review.
 
 The following checks are intentionally not claimed as complete:
 
-- Record the user's listening-quality observations for all five rates and the heading, paragraph, and
-  list pauses.
 - Convert and listen to one representative personal browser-saved PDF and one Markdown article.
 
 The controller is proceeding with these manual checks and will update this record with their results.
