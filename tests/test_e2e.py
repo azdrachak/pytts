@@ -106,7 +106,11 @@ def test_markdown_to_audio_contract(tmp_path: Path) -> None:
     combined = " ".join(runtime.ssml)
     assert "Проверка синтеза" in combined
     assert "Уважаемый читатель" in combined
-    assert "2026" in combined and "25 %" in combined and "1 500 ₽" in combined
+    assert "две тысячи двадцать шестом году" in combined
+    assert "двадцать пять процентов" in combined
+    assert "одна тысяча пятьсот рублей" in combined
+    assert not any(character.isdigit() for character in combined)
+    assert all(symbol not in combined for symbol in "%₽$€£")
     assert "https://" not in combined
     assert result.chunk_count == len(runtime.ssml)
     assert writers[0].committed

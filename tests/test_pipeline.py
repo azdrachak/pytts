@@ -79,11 +79,21 @@ def _pipeline(
     *,
     reader: FakeInputReader | None = None,
     runtime_calls: list[object] | None = None,
+    max_text_chars: int = 800,
 ) -> ConversionPipeline:
     (tmp_path / "pytts.yaml").write_text(
-        'version: 1\nabbreviations:\n  "ув.": "уважаемый"\n', encoding="utf-8"
+        'version: 1\nabbreviations:\n  "ув.": "уважаемый"\n'
+        'transliterations:\n  "Brent": "Брент"\n',
+        encoding="utf-8",
     )
-    spec = ModelSpec("v5_5_ru", "https://example.test", "a" * 64, "xenia", 48000, 800)
+    spec = ModelSpec(
+        "v5_5_ru",
+        "https://example.test",
+        "a" * 64,
+        "xenia",
+        48000,
+        max_text_chars,
+    )
 
     def runtime_factory(progress: object) -> FakeRuntime:
         if runtime_calls is not None:
@@ -133,6 +143,74 @@ def test_conversion_expands_chunks_synthesizes_and_commits(tmp_path: Path) -> No
         ProgressStage.FINALIZE,
         ProgressStage.COMPLETE,
     ]
+
+
+def test_normalizes_after_abbreviations_and_before_chunking(tmp_path: Path) -> None:
+    runtime = FakeRuntime()
+    pipeline = _pipeline(
+        tmp_path,
+        runtime,
+        [],
+        [],
+        reader=FakeInputReader("Ув. автор: в 2026 году Brent вырос на 15%."),
+    )
+    source = tmp_path / "article.md"
+    source.write_text("source", encoding="utf-8")
+
+    pipeline.convert(ConversionRequest(source))
+
+    combined = " ".join(runtime.chunks)
+    assert "Уважаемый автор" in combined
+    assert "две тысячи двадцать шестом году" in combined
+    assert "Брент вырос на пятнадцать процентов" in combined
+    assert not any(character.isdigit() for character in combined)
+
+
+def test_normalization_failure_precedes_model_and_writer(tmp_path: Path) -> None:
+    runtime_calls: list[object] = []
+    writers: list[FakeWriter] = []
+    pipeline = _pipeline(
+        tmp_path,
+        FakeRuntime(),
+        [],
+        writers,
+        reader=FakeInputReader("Значение α."),
+        runtime_calls=runtime_calls,
+    )
+    source = tmp_path / "article.md"
+    source.write_text("source", encoding="utf-8")
+
+    with pytest.raises(InputError, match="α"):
+        pipeline.convert(ConversionRequest(source))
+
+    assert not runtime_calls
+    assert not writers
+
+
+def test_chunks_post_normalization_text_with_requested_ssml_speed(
+    tmp_path: Path,
+) -> None:
+    runtime = FakeRuntime()
+    source_text = " ".join(["1 500"] * 12)
+    pipeline = _pipeline(
+        tmp_path,
+        runtime,
+        [],
+        [],
+        reader=FakeInputReader(source_text),
+        max_text_chars=64,
+    )
+    source = tmp_path / "article.md"
+    source.write_text("source", encoding="utf-8")
+
+    pipeline.convert(ConversionRequest(source))
+
+    plain_payloads = [
+        chunk.split(">", 2)[2].split("<", 1)[0] for chunk in runtime.chunks
+    ]
+    assert all(len(payload) <= 64 for payload in plain_payloads)
+    assert all('<prosody rate="medium">' in chunk for chunk in runtime.chunks)
+    assert len(runtime.chunks) > 1
 
 
 def test_synthesis_failure_aborts_writer(tmp_path: Path) -> None:

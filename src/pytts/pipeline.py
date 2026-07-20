@@ -16,6 +16,7 @@ from pytts.model_store import DownloadProgress, ModelSpec
 from pytts.text.abbreviations import AbbreviationExpander
 from pytts.text.chunker import chunk_article
 from pytts.text.cleaner import clean_article
+from pytts.text.pronunciation import PronunciationNormalizer
 from pytts.tts import VoiceSelection
 
 
@@ -148,7 +149,7 @@ class ConversionPipeline:
     def convert(self, request: ConversionRequest) -> ConversionResult:
         output = self._output_path(request)
 
-        self._emit(ProgressStage.CONFIG, message="Loading abbreviation config")
+        self._emit(ProgressStage.CONFIG, message="Loading text normalization config")
         config = load_config(request.config_path, self._project_root)
         self._emit(ProgressStage.READ, message=f"Reading {request.input_path}")
         article = self._input_reader.read(request.input_path)
@@ -159,7 +160,10 @@ class ConversionPipeline:
             warning=cleaned.warning is not None,
         )
         expanded = AbbreviationExpander(config.abbreviations).expand_article(cleaned.article)
-        chunks = chunk_article(expanded, request.rate, self._spec.max_text_chars)
+        normalized = PronunciationNormalizer(config.transliterations).normalize_article(
+            expanded
+        )
+        chunks = chunk_article(normalized, request.rate, self._spec.max_text_chars)
         self._emit(ProgressStage.CHUNK, completed=len(chunks), total=len(chunks))
 
         runtime = self._runtime()
