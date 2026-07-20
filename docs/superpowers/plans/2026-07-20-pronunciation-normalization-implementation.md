@@ -823,6 +823,7 @@ Create `tests/text/test_numeric_normalizer.py` with a helper and the first contr
 ```python
 import pytest
 
+from pytts.errors import InputError
 from pytts.text.numeric_normalizer import NumericNormalizer
 
 
@@ -847,6 +848,7 @@ def _normalize(text: str) -> str:
         ("142-й день", "сто сорок второй день"),
         ("56-летний и 56-летнего", "пятидесятишестилетний и пятидесятишестилетнего"),
         ("90-долларовый и 90-долларового", "девяностодолларовый и девяностодолларового"),
+        # The first letter in С-300 is Cyrillic U+0421, not Latin C.
         ("FP-5, F-16, С-300", "эф пи пять, эф шестнадцать, эс триста"),
     ],
 )
@@ -854,6 +856,11 @@ def test_normalizes_dates_years_ordinals_compounds_and_codes(
     source: str, expected: str
 ) -> None:
     assert _normalize(source) == expected
+
+
+def test_rejects_invalid_numeric_calendar_date() -> None:
+    with pytest.raises(InputError, match="Invalid calendar date"):
+        _normalize("10.20.2021")
 ```
 
 - [ ] **Step 2: Run the first focused cases and confirm RED**
@@ -879,7 +886,14 @@ from datetime import date
 
 from pytts.errors import InputError
 from pytts.text.latin import spell_code_letters
-from pytts.text.russian_numbers import cardinal, decimal_words, noun_form, ordinal, parse_integer
+from pytts.text.russian_numbers import (
+    RussianGender,
+    cardinal,
+    decimal_words,
+    noun_form,
+    ordinal,
+    parse_integer,
+)
 
 _INTEGER = r"(?:\d{1,3}(?: \d{3})+|\d+)"
 _DASH = r"[-–—]"
@@ -984,6 +998,11 @@ Append:
         ("1 €, 2 EUR, 5 евро", "один евро, два евро, пять евро"),
         ("1 £, 2 GBP, 5 USD", "один фунт, два фунта, пять долларов"),
         ("12,50 ₽", "двенадцать рублей пятьдесят копеек"),
+        ("1,01 ₽", "один рубль одна копейка"),
+        ("1,02 ₽", "один рубль две копейки"),
+        ("0,21 ₽", "ноль рублей двадцать одна копейка"),
+        ("$5.", "пять долларов."),
+        ("€10,", "десять евро,"),
         ("15% и 21 %", "пятнадцать процентов и двадцать один процент"),
         ("от 5 до 7", "от пяти до семи"),
         ("3–5", "от трёх до пяти"),
@@ -1012,10 +1031,16 @@ Add:
 class CurrencyForms:
     major: tuple[str, str, str]
     minor: tuple[str, str, str]
+    major_gender: RussianGender = "m"
+    minor_gender: RussianGender = "m"
 
 
 _CURRENCIES = {
-    "RUB": CurrencyForms(("рубль", "рубля", "рублей"), ("копейка", "копейки", "копеек")),
+    "RUB": CurrencyForms(
+        ("рубль", "рубля", "рублей"),
+        ("копейка", "копейки", "копеек"),
+        minor_gender="f",
+    ),
     "USD": CurrencyForms(("доллар", "доллара", "долларов"), ("цент", "цента", "центов")),
     "EUR": CurrencyForms(("евро", "евро", "евро"), ("цент", "цента", "центов")),
     "GBP": CurrencyForms(("фунт", "фунта", "фунтов"), ("пенс", "пенса", "пенсов")),
@@ -1045,7 +1070,7 @@ _PERCENT_RANGE = re.compile(
     rf"(?<!\w)(?P<left>{_INTEGER})\s*{_DASH}\s*(?P<right>{_INTEGER})\s*%(?!\w)"
 )
 _CURRENCY_PREFIX = re.compile(
-    rf"(?<!\w)(?P<currency>[₽$€£])\s*(?P<amount>{_AMOUNT})(?![\w.,])"
+    rf"(?<!\w)(?P<currency>[₽$€£])\s*(?P<amount>{_AMOUNT})(?!\w|[.,]\d)"
 )
 _CURRENCY_SUFFIX = re.compile(
     rf"(?<![\w.,])(?P<amount>{_AMOUNT})\s*(?P<currency>{_CURRENCY_TOKEN})(?!\w)",
@@ -1082,10 +1107,12 @@ def _currency_amount_words(raw: str, code: str) -> str:
     whole_text, separator, fraction_text = normalized.partition(".")
     whole = int(whole_text)
     forms = _CURRENCIES[code]
-    pieces = [cardinal(whole), noun_form(whole, forms.major)]
+    pieces = [cardinal(whole, gender=forms.major_gender), noun_form(whole, forms.major)]
     if separator:
         minor = int(fraction_text.ljust(2, "0"))
-        pieces.extend((cardinal(minor), noun_form(minor, forms.minor)))
+        pieces.extend(
+            (cardinal(minor, gender=forms.minor_gender), noun_form(minor, forms.minor))
+        )
     return " ".join(pieces)
 
 
@@ -1095,6 +1122,12 @@ def _range_words(left: str, right: str, noun: str | None = None) -> str:
 ```
 
 Resolve `match.group("currency")` through `_CURRENCY_ALIASES[raw.casefold()]`; include symbol keys unchanged in the same map. `_currency_amount` calls `_currency_amount_words`. `_currency_range` calls `_range_words` with the third major form (`долларов`, `рублей`, `евро`, `фунтов`). `_percent_range` appends `процентов`. `_percent` selects `процент/процента/процентов` from the parsed integer value. `_explicit_range` and `_bare_range` call `_range_words` without a noun. Applying explicit `от X до Y` before bare ranges prevents a second rewrite.
+
+The prefix-amount trailing guard is deliberately `(?!\w|[.,]\d)`: sentence punctuation such as
+`$5.` and `€10,` remains outside the match, while malformed or unsupported continuations such as
+`$5USD` and `$5.123` cannot be accepted partially as `$5`. Keep the existing left guards on
+`_CURRENCY_SUFFIX` and `_PERCENT` so neither rule can start inside a decimal, and keep their
+`(?!\w)` right guards; those already allow punctuation.
 
 - [ ] **Step 7: Add and implement generic degrees, decimals and integers**
 
@@ -1365,6 +1398,11 @@ git commit -m "feat: compose pronunciation normalization"
 
 - [ ] **Step 1: Write failing pipeline-order and early-failure tests**
 
+Reuse the existing test harness without inventing new fakes: `FakeInputReader` already accepts a
+text argument, `FakeRuntime.chunks` records synthesized SSML, `_pipeline(..., reader=...)` already
+injects a reader, and `_pipeline(..., runtime_calls=...)` already records actual runtime-factory
+invocations. Preserve those behaviors while extending the helper below.
+
 Update `_pipeline` in `tests/test_pipeline.py` so its root config includes an exact override:
 
 ```python
@@ -1460,7 +1498,18 @@ Change the config progress message to `Loading text normalization config`. Do no
 
 - [ ] **Step 4: Verify post-expansion chunk limits and SSML speed**
 
-Add a `max_text_chars: int = 800` keyword to the `_pipeline` test helper and construct its spec with:
+Add `max_text_chars: int = 800` after the existing `reader` and `runtime_calls` keyword parameters
+of `_pipeline`; do not remove or rename either existing injection point. The resulting keyword tail
+is:
+
+```python
+*,
+reader: FakeInputReader | None = None,
+runtime_calls: list[object] | None = None,
+max_text_chars: int = 800,
+```
+
+Construct its spec with:
 
 ```python
 spec = ModelSpec(
@@ -1583,6 +1632,8 @@ Replace the obsolete Latin/numeric limitation bullets with these exact limitatio
   `эн эй эс эй`; override it in `transliterations` when word-like pronunciation is preferred.
 - Greek and other non-Cyrillic letters, emoji, and unknown semantic symbols fail closed unless an
   exact `transliterations` replacement makes them speakable.
+- Numeric shapes `DD.MM.YYYY` and `DD/MM/YYYY` are always treated as calendar dates. Version-like
+  triples require an exact replacement or source rewrite; invalid calendar dates fail closed.
 - Context rules cover the documented dates, years, currency, ranges and two compound-adjective
   families; ambiguous Russian syntax can still produce a non-ideal case.
 ```
