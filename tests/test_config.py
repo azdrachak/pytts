@@ -30,6 +30,7 @@ def test_explicit_config_replaces_root_config(tmp_path: Path) -> None:
     config = load_config(explicit, root)
 
     assert dict(config.abbreviations) == {"ув.": "уважаемый"}
+    assert dict(config.transliterations) == {}
 
 
 def test_relative_explicit_config_is_resolved_from_current_directory(
@@ -47,6 +48,61 @@ def test_relative_explicit_config_is_resolved_from_current_directory(
     config = load_config(Path("custom.yaml"), root)
 
     assert dict(config.abbreviations) == {"ув.": "уважаемый"}
+    assert dict(config.transliterations) == {}
+
+
+def test_loads_optional_transliterations(tmp_path: Path) -> None:
+    path = tmp_path / "pytts.yaml"
+    path.write_text(
+        """version: 1
+abbreviations: {}
+transliterations:
+  Brent: Брент
+  New York Times: Нью-Йорк таймс
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(path, tmp_path)
+
+    assert dict(config.abbreviations) == {}
+    assert dict(config.transliterations) == {
+        "Brent": "Брент",
+        "New York Times": "Нью-Йорк таймс",
+    }
+
+
+def test_config_without_transliterations_is_backward_compatible(tmp_path: Path) -> None:
+    path = tmp_path / "pytts.yaml"
+    path.write_text(
+        'version: 1\nabbreviations:\n  "ув.": "уважаемый"\n',
+        encoding="utf-8",
+    )
+
+    config = load_config(path, tmp_path)
+
+    assert dict(config.abbreviations) == {"ув.": "уважаемый"}
+    assert dict(config.transliterations) == {}
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "version: 1\nabbreviations: {}\ntransliterations: []\n",
+        'version: 1\nabbreviations: {}\ntransliterations:\n  Brent: ""\n',
+        (
+            "version: 1\nabbreviations: {}\ntransliterations:\n"
+            "  Brent: один\n  BRENT: два\n"
+        ),
+        'version: 1\nabbreviations: {}\ntransliterations:\n  "": пустой\n',
+    ],
+)
+def test_invalid_transliterations_are_rejected(tmp_path: Path, content: str) -> None:
+    path = tmp_path / "bad.yaml"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="transliteration"):
+        load_config(path, tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -75,6 +131,10 @@ def test_invalid_config_is_rejected(tmp_path: Path, content: str) -> None:
     [
         "version: 1\nversion: 1\nabbreviations: {}\n",
         'version: 1\nabbreviations:\n  "ув.": "уважаемый"\n  "ув.": "уважаемая"\n',
+        (
+            "version: 1\nabbreviations: {}\ntransliterations:\n"
+            "  Brent: Брент\n  Brent: Бренд\n"
+        ),
     ],
 )
 def test_exact_duplicate_yaml_keys_are_rejected(tmp_path: Path, content: str) -> None:
@@ -117,7 +177,10 @@ def test_missing_or_malformed_config_content_is_rejected(tmp_path: Path, content
 
 
 def test_missing_root_config_returns_empty_mapping(tmp_path: Path) -> None:
-    assert dict(load_config(None, tmp_path).abbreviations) == {}
+    config = load_config(None, tmp_path)
+
+    assert dict(config.abbreviations) == {}
+    assert dict(config.transliterations) == {}
 
 
 def test_missing_explicit_config_is_an_error(tmp_path: Path) -> None:

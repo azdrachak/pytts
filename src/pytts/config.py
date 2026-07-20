@@ -37,6 +37,7 @@ class DuplicateAwareSafeLoader(yaml.SafeLoader):
 @dataclass(frozen=True, slots=True)
 class AppConfig:
     abbreviations: Mapping[str, str]
+    transliterations: Mapping[str, str]
 
 
 def find_project_root(module_path: Path) -> Path:
@@ -47,19 +48,24 @@ def find_project_root(module_path: Path) -> Path:
     raise ConfigError(f"Could not find pyproject.toml above {module_path}")
 
 
-def _validate_abbreviations(value: object, path: Path) -> Mapping[str, str]:
+def _validate_mapping(
+    value: object,
+    path: Path,
+    field: str,
+) -> Mapping[str, str]:
     if not isinstance(value, dict):
-        raise ConfigError(f"{path}: abbreviations must be a mapping")
+        raise ConfigError(f"{path}: {field} must be a mapping")
     result: dict[str, str] = {}
     folded: set[str] = set()
+    singular = "abbreviation" if field == "abbreviations" else "transliteration"
     for key, replacement in value.items():
         if not isinstance(key, str) or not key:
-            raise ConfigError(f"{path}: abbreviation keys must be non-empty strings")
+            raise ConfigError(f"{path}: {singular} keys must be non-empty strings")
         if not isinstance(replacement, str) or not replacement:
-            raise ConfigError(f"{path}: replacements must be non-empty strings")
+            raise ConfigError(f"{path}: {singular} replacements must be non-empty strings")
         normalized = key.casefold()
         if normalized in folded:
-            raise ConfigError(f"{path}: duplicate abbreviation ignoring case: {key}")
+            raise ConfigError(f"{path}: duplicate {singular} ignoring case: {key}")
         folded.add(normalized)
         result[key] = replacement
     return MappingProxyType(result)
@@ -70,7 +76,8 @@ def load_config(explicit_path: Path | None, project_root: Path) -> AppConfig:
     if not path.exists():
         if explicit_path is not None:
             raise ConfigError(f"Explicit config does not exist: {path}")
-        return AppConfig(MappingProxyType({}))
+        empty: Mapping[str, str] = MappingProxyType({})
+        return AppConfig(empty, empty)
     try:
         loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=DuplicateAwareSafeLoader)
     except (OSError, UnicodeError, yaml.YAMLError) as error:
@@ -79,9 +86,16 @@ def load_config(explicit_path: Path | None, project_root: Path) -> AppConfig:
         raise ConfigError(f"{path}: top level must be a mapping")
     if not all(isinstance(key, str) for key in loaded):
         raise ConfigError(f"{path}: top-level field names must be strings")
-    unknown = set(loaded) - {"version", "abbreviations"}
+    unknown = set(loaded) - {"version", "abbreviations", "transliterations"}
     if unknown:
         raise ConfigError(f"{path}: unknown fields: {', '.join(sorted(unknown))}")
     if type(loaded.get("version")) is not int or loaded["version"] != 1:
         raise ConfigError(f"{path}: version must be 1")
-    return AppConfig(_validate_abbreviations(loaded.get("abbreviations"), path))
+    return AppConfig(
+        abbreviations=_validate_mapping(
+            loaded.get("abbreviations"), path, "abbreviations"
+        ),
+        transliterations=_validate_mapping(
+            loaded.get("transliterations", {}), path, "transliterations"
+        ),
+    )
