@@ -59,9 +59,9 @@ def _validate_mapping(
     folded: set[str] = set()
     singular = "abbreviation" if field == "abbreviations" else "transliteration"
     for key, replacement in value.items():
-        if not isinstance(key, str) or not key:
+        if not isinstance(key, str) or not key.strip():
             raise ConfigError(f"{path}: {singular} keys must be non-empty strings")
-        if not isinstance(replacement, str) or not replacement:
+        if not isinstance(replacement, str) or not replacement.strip():
             raise ConfigError(f"{path}: {singular} replacements must be non-empty strings")
         normalized = key.casefold()
         if normalized in folded:

@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 
 import pytts.cli as cli
 from pytts.domain import ConversionResult
-from pytts.errors import InputError, ModelError, SynthesisError
+from pytts.errors import ConfigError, InputError, ModelError, SynthesisError
 
 runner = CliRunner()
 
@@ -94,7 +94,12 @@ def test_conversion_builds_request(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.parametrize(
     ("error", "code"),
-    [(InputError("bad input"), 3), (ModelError("bad model"), 4), (SynthesisError("bad audio"), 5)],
+    [
+        (InputError("bad input"), 3),
+        (ConfigError("bad config"), 3),
+        (ModelError("bad model"), 4),
+        (SynthesisError("bad audio"), 5),
+    ],
 )
 def test_maps_application_errors(
     monkeypatch: pytest.MonkeyPatch, error: Exception, code: int

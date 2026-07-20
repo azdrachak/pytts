@@ -95,6 +95,8 @@ def test_config_without_transliterations_is_backward_compatible(tmp_path: Path) 
             "  Brent: один\n  BRENT: два\n"
         ),
         'version: 1\nabbreviations: {}\ntransliterations:\n  "": пустой\n',
+        'version: 1\nabbreviations: {}\ntransliterations:\n  "   ": пустой\n',
+        'version: 1\nabbreviations: {}\ntransliterations:\n  Brent: "   "\n',
     ],
 )
 def test_invalid_transliterations_are_rejected(tmp_path: Path, content: str) -> None:
@@ -116,6 +118,8 @@ def test_invalid_transliterations_are_rejected(tmp_path: Path, content: str) -> 
         'version: 1\nabbreviations:\n  "ув.": null\n',
         'version: 1\nabbreviations:\n  "УВ.": "один"\n  "ув.": "два"\n',
         'version: 1\nabbreviations:\n  "": "пустой"\n',
+        'version: 1\nabbreviations:\n  "   ": "пустой"\n',
+        'version: 1\nabbreviations:\n  "ув.": "   "\n',
     ],
 )
 def test_invalid_config_is_rejected(tmp_path: Path, content: str) -> None:
