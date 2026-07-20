@@ -6,6 +6,11 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
+from urllib.parse import urlsplit
+from uuid import uuid4
+
+import fcntl
 
 import platformdirs
 import yaml
@@ -17,6 +22,7 @@ DownloadProgress = Callable[[int, int | None], None]
 PackageValidator = Callable[[Path], None]
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 _MODEL_FIELDS = {
     "model_id",
     "url",
@@ -25,6 +31,8 @@ _MODEL_FIELDS = {
     "sample_rate",
     "max_text_chars",
 }
+_THREAD_LOCKS: dict[Path, Lock] = {}
+_THREAD_LOCKS_GUARD = Lock()
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +43,51 @@ class ModelSpec:
     preferred_voice: str
     sample_rate: int
     max_text_chars: int
+
+
+def _validate_spec(spec: ModelSpec) -> None:
+    if not all(
+        isinstance(value, str) and value
+        for value in (spec.model_id, spec.url, spec.preferred_voice)
+    ):
+        raise ModelError("model string fields must not be empty")
+    if not _MODEL_ID.fullmatch(spec.model_id):
+        raise ModelError("model_id must use only filename-safe letters, digits, dots, underscores, or hyphens")
+    try:
+        parsed = urlsplit(spec.url)
+        port = parsed.port
+    except ValueError as error:
+        raise ModelError(f"model URL is invalid: {error}") from error
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None and not 0 < port < 65536
+    ):
+        raise ModelError("model URL must be an absolute HTTPS URL with a hostname and no credentials")
+    if not isinstance(spec.sha256, str) or not _SHA256.fullmatch(spec.sha256):
+        raise ModelError("sha256 must be 64 lowercase hexadecimal characters")
+    if (
+        type(spec.sample_rate) is not int
+        or type(spec.max_text_chars) is not int
+        or spec.sample_rate != 48000
+        or not 64 <= spec.max_text_chars <= 800
+    ):
+        raise ModelError("unsupported sample rate or text limit")
+
+
+def _thread_lock_for(target: Path) -> Lock:
+    key = target.resolve()
+    with _THREAD_LOCKS_GUARD:
+        return _THREAD_LOCKS.setdefault(key, Lock())
+
+
+def _best_effort_unlink(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def load_model_spec(path: Path | None = None) -> ModelSpec:
@@ -61,20 +114,10 @@ def load_model_spec(path: Path | None = None) -> ModelSpec:
     except TypeError as error:
         raise ModelError(f"{source}: invalid model values: {error}") from error
 
-    if not all(
-        isinstance(value, str) and value
-        for value in (spec.model_id, spec.url, spec.preferred_voice)
-    ):
-        raise ModelError(f"{source}: string fields must not be empty")
-    if not isinstance(spec.sha256, str) or not _SHA256.fullmatch(spec.sha256):
-        raise ModelError(f"{source}: sha256 must be 64 lowercase hexadecimal characters")
-    if (
-        type(spec.sample_rate) is not int
-        or type(spec.max_text_chars) is not int
-        or spec.sample_rate != 48000
-        or not 64 <= spec.max_text_chars <= 800
-    ):
-        raise ModelError(f"{source}: unsupported sample rate or text limit")
+    try:
+        _validate_spec(spec)
+    except ModelError as error:
+        raise ModelError(f"{source}: {error}") from error
     return spec
 
 
@@ -117,6 +160,7 @@ class ModelStore:
         progress: DownloadProgress | None = None,
     ) -> Path:
         """Return a re-hashed cached model or atomically cache a validated download."""
+        _validate_spec(spec)
         models = self._root / "models"
         try:
             models.mkdir(parents=True, exist_ok=True)
@@ -124,31 +168,39 @@ class ModelStore:
             raise ModelError(f"Could not create model cache directory {models}: {error}") from error
 
         target = models / f"{spec.model_id}.pt"
-        partial = target.with_name(target.name + ".download")
-        if target.exists():
-            try:
-                self._verify(target, spec)
-            except ModelError:
-                raise
-            except (KeyboardInterrupt, SystemExit):
-                raise
-            except Exception as error:
-                raise ModelError(f"Could not validate cached model {target}: {error}") from error
-            return target
+        lock_path = target.with_name(target.name + ".lock")
+        with _thread_lock_for(target):
+            with lock_path.open("a+b") as lock_file:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                try:
+                    if target.exists():
+                        try:
+                            self._verify(target, spec)
+                        except ModelError:
+                            raise
+                        except (KeyboardInterrupt, SystemExit):
+                            raise
+                        except Exception as error:
+                            raise ModelError(f"Could not validate cached model {target}: {error}") from error
+                        return target
 
-        try:
-            partial.unlink(missing_ok=True)
-            self._download(spec.url, partial, progress)
-            self._verify(partial, spec)
-            validate_package(partial)
-            os.replace(partial, target)
-        except ModelError:
-            partial.unlink(missing_ok=True)
-            raise
-        except (KeyboardInterrupt, SystemExit):
-            partial.unlink(missing_ok=True)
-            raise
-        except Exception as error:
-            partial.unlink(missing_ok=True)
-            raise ModelError(f"Could not download or validate model {spec.url}: {error}") from error
-        return target
+                    partial = target.with_name(f"{target.name}.{uuid4().hex}.download")
+                    try:
+                        self._download(spec.url, partial, progress)
+                        self._verify(partial, spec)
+                        validate_package(partial)
+                        os.replace(partial, target)
+                    except ModelError:
+                        _best_effort_unlink(partial)
+                        raise
+                    except (KeyboardInterrupt, SystemExit):
+                        _best_effort_unlink(partial)
+                        raise
+                    except Exception as error:
+                        _best_effort_unlink(partial)
+                        raise ModelError(
+                            f"Could not download or validate model {spec.url}: {error}"
+                        ) from error
+                    return target
+                finally:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)

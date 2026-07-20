@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from pathlib import Path
+from threading import Event
 from urllib.error import URLError
 
 import pytest
@@ -68,6 +70,60 @@ def test_load_model_spec_rejects_invalid_manifests(tmp_path: Path, contents: str
         load_model_spec(manifest)
 
 
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"model_id": "../outside"},
+        {"model_id": "v5_5_ru/model"},
+        {"url": "http://models.silero.ai/model.pt"},
+        {"url": "file:///tmp/model.pt"},
+        {"url": "https://user:password@models.silero.ai/model.pt"},
+    ],
+)
+def test_load_model_spec_rejects_unsafe_model_location(
+    tmp_path: Path, overrides: dict[str, object]
+) -> None:
+    manifest = tmp_path / "model_manifest.yaml"
+    _write_manifest(manifest, **overrides)
+
+    with pytest.raises(ModelError, match="model_id|HTTPS"):
+        load_model_spec(manifest)
+
+
+@pytest.mark.parametrize(
+    ("model_id", "url"),
+    [
+        ("../outside", "https://example.test/model.pt"),
+        ("v5_5_ru", "http://example.test/model.pt"),
+        ("v5_5_ru", "file:///tmp/model.pt"),
+        ("v5_5_ru", "https://user:password@example.test/model.pt"),
+    ],
+)
+def test_ensure_rejects_unsafe_direct_spec_before_cache_or_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model_id: str, url: str
+) -> None:
+    downloads: list[Path] = []
+
+    def download(_: str, path: Path, __: object) -> None:
+        downloads.append(path)
+
+    monkeypatch.setattr(ModelStore, "_download", staticmethod(download))
+    spec = ModelSpec(
+        model_id=model_id,
+        url=url,
+        sha256=sha256(b"package bytes").hexdigest(),
+        preferred_voice="xenia",
+        sample_rate=48000,
+        max_text_chars=448,
+    )
+
+    with pytest.raises(ModelError, match="model_id|HTTPS"):
+        ModelStore(cache_root=tmp_path).ensure(spec, lambda path: None)
+
+    assert downloads == []
+    assert not (tmp_path / "models").exists()
+
+
 def test_downloads_validates_fsyncs_reports_progress_and_reuses_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -103,7 +159,10 @@ def test_downloads_validates_fsyncs_reports_progress_and_reuses_cache(
 
     assert first == second == tmp_path / "models/v5_5_ru.pt"
     assert first.read_bytes() == payload
-    assert validations == [first.with_name(first.name + ".download")]
+    assert len(validations) == 1
+    assert validations[0].parent == first.parent
+    assert validations[0].name.startswith(first.name + ".")
+    assert validations[0].name.endswith(".download")
     assert completed == [(len(payload), len(payload))]
     assert fsynced
     assert not first.with_name(first.name + ".download").exists()
@@ -190,4 +249,52 @@ def test_interrupted_download_removes_partial(tmp_path: Path, monkeypatch: pytes
     with pytest.raises(KeyboardInterrupt):
         ModelStore(cache_root=tmp_path).ensure(_spec(), lambda path: None)
 
-    assert not (tmp_path / "models/v5_5_ru.pt.download").exists()
+    assert not list((tmp_path / "models").glob("*.download"))
+
+
+def test_concurrent_callers_share_one_verified_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = b"package bytes"
+    started = Event()
+    finish = Event()
+    downloads: list[Path] = []
+
+    def download(_: str, path: Path, __: object) -> None:
+        downloads.append(path)
+        started.set()
+        assert finish.wait(timeout=5)
+        path.write_bytes(payload)
+
+    monkeypatch.setattr(ModelStore, "_download", staticmethod(download))
+    store = ModelStore(cache_root=tmp_path)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(store.ensure, _spec(), lambda path: None)
+        assert started.wait(timeout=5)
+        second = executor.submit(store.ensure, _spec(), lambda path: None)
+        finish.set()
+        results = [first.result(timeout=5), second.result(timeout=5)]
+
+    assert results == [tmp_path / "models/v5_5_ru.pt"] * 2
+    assert len(downloads) == 1
+    assert not list((tmp_path / "models").glob("*.download"))
+
+
+def test_cleanup_failure_does_not_mask_primary_download_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(_: str, path: Path, __: object) -> None:
+        path.write_bytes(b"partial")
+        raise URLError("offline")
+
+    def broken_unlink(_: Path, *, missing_ok: bool = False) -> None:
+        raise OSError("cleanup is unavailable")
+
+    monkeypatch.setattr(ModelStore, "_download", staticmethod(fail))
+    monkeypatch.setattr(Path, "unlink", broken_unlink)
+
+    with pytest.raises(ModelError, match="offline") as captured:
+        ModelStore(cache_root=tmp_path).ensure(_spec(), lambda path: None)
+
+    assert "cleanup is unavailable" not in str(captured.value)
