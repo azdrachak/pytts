@@ -75,8 +75,8 @@ loading so they cannot disappear silently from the audio.
 
 Output is one mono 48 kHz, 16-bit-source, CBR 96 Kbit/s MP3. The encoder writes `OUTPUT.part` and
 atomically installs `OUTPUT` only after successful completion. Use `--force` to replace an existing
-output. Exit codes are 2 for usage, 3 for input/config/output, 4 for model failures, 5 for
-synthesis/encoding, and 130 for interruption. `--debug` includes a traceback.
+output. Exit codes are 2 for usage, 3 for input/config/output-path validation, 4 for model failures,
+5 for synthesis/encoding/output I/O, and 130 for interruption. `--debug` includes a traceback.
 
 ## Known limitations
 
