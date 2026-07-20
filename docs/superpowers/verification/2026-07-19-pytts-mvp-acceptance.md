@@ -23,18 +23,29 @@ environment or listening review.
 - `uv run pytts --list-voices` printed exactly: `aidar`, `baya`, `kseniya`, `eugene`, `xenia`.
 - `uv run pytts tests/fixtures/smoke.md --output artifacts/smoke.mp3 --force` produced a valid
   `artifacts/smoke.mp3`: mono, 48 kHz, 96,000 bit/s, 14.3 s, and `BitrateMode.UNKNOWN`.
-- The final network-free suite reported `190 passed, 2 deselected`.
+- With `PYTTS_RUN_SILERO=1`, `HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` set to
+  `http://127.0.0.1:9`, and an empty `NO_PROXY`, the real integration test completed with `2 passed`.
+  The verified cached model required no download.
+- The actual CLI generated ignored artifacts successfully at `x-slow`, `slow`, `normal`, `fast`, and
+  `x-fast`. Sequential `afplay` playback completed; no subjective listening-quality observation is
+  recorded yet.
+- A synthetic `AtomicMp3Writer` soak encoded 3,600 one-second float32 PCM chunks into a 3,600.02 s
+  mono 48 kHz / 96 Kbit/s MP3 of 43,200,288 bytes. `resource.ru_maxrss` was exactly 186.4 MiB at 600,
+  1,800, and 3,600 encoded seconds; a repeat exited cleanly. The 41 MiB temporary artifact was removed.
+  This establishes bounded writer memory only, not a real one-hour Silero article conversion.
+- The latest network-free suite from `7945a86` reported `191 passed, 2 deselected`.
 - Expected warnings were PyTorch reporting missing optional NumPy and the packaged model's
   `SyntaxWarning`.
-- Generated artifacts are ignored; the acceptance worktree was clean after verification.
+- Generated artifacts are ignored. `.DS_Store` remains untracked user/system state and is intentionally
+  excluded from acceptance commits.
 
 ## Pending manual acceptance
 
 The following checks are intentionally not claimed as complete:
 
-- Repeat conversion with network access disabled after the verified model is cached.
-- Listen to all five rates and inspect heading, paragraph, and list pauses.
+- Record the user's listening-quality observations for all five rates and the heading, paragraph, and
+  list pauses.
 - Convert and listen to one representative personal browser-saved PDF and one Markdown article.
-- Run an article approaching one hour while monitoring memory in Activity Monitor.
+- Run a real Silero article approaching one hour while monitoring memory in Activity Monitor.
 
 The controller is proceeding with these manual checks and will update this record with their results.
