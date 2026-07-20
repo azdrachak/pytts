@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from pytts.domain import Article, BlockKind, SpeechRate, TextBlock
-from pytts.errors import ConfigError, InputError, ModelError, SynthesisError, UsageError
+from pytts.errors import AudioError, ConfigError, InputError, ModelError, SynthesisError, UsageError
 
 
 def test_text_block_rejects_blank_text() -> None:
@@ -25,3 +25,4 @@ def test_stable_application_exit_codes() -> None:
     assert InputError.exit_code == ConfigError.exit_code == 3
     assert ModelError.exit_code == 4
     assert SynthesisError.exit_code == 5
+    assert AudioError.exit_code == 5

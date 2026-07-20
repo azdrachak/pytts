@@ -24,3 +24,7 @@ class ModelIntegrityError(ModelError):
 
 class SynthesisError(PyTTSError):
     exit_code = 5
+
+
+class AudioError(SynthesisError):
+    """PCM conversion, LAME encoding, or atomic output failure."""
