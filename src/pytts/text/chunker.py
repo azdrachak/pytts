@@ -6,7 +6,7 @@ import re
 from pytts.domain import Article, BlockKind, SpeechChunk, SpeechRate
 from pytts.errors import InputError
 
-_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?…])\s+")
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?…])[»”\"')\]]*\s+")
 _PREFERRED_PUNCTUATION = frozenset(",;:—–")
 _FINAL_PAUSE = {
     BlockKind.HEADING: 700,
@@ -22,9 +22,9 @@ def _split_long(text: str, limit: int) -> list[str]:
     while len(remaining) > limit:
         preferred: list[int] = []
         whitespace: list[int] = []
-        for index, character in enumerate(remaining[:limit]):
+        for index, character in enumerate(remaining[: limit + 1]):
             is_boundary = index + 1 == len(remaining) or remaining[index + 1].isspace()
-            if character in _PREFERRED_PUNCTUATION and is_boundary:
+            if index < limit and character in _PREFERRED_PUNCTUATION and is_boundary:
                 preferred.append(index + 1)
             if character.isspace():
                 whitespace.append(index)
@@ -50,7 +50,17 @@ def _split_long(text: str, limit: int) -> list[str]:
 
 
 def _units(text: str, limit: int) -> list[str]:
-    sentences = [sentence.strip() for sentence in _SENTENCE_BOUNDARY.split(text) if sentence.strip()]
+    sentences: list[str] = []
+    start = 0
+    for boundary in _SENTENCE_BOUNDARY.finditer(text):
+        sentence = text[start : boundary.end()].strip()
+        if sentence:
+            sentences.append(sentence)
+        start = boundary.end()
+    tail = text[start:].strip()
+    if tail:
+        sentences.append(tail)
+
     units: list[str] = []
     for sentence in sentences:
         units.extend(_split_long(sentence, limit) if len(sentence) > limit else [sentence])

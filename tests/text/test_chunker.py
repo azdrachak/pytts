@@ -120,6 +120,39 @@ def test_rejects_clean_token_above_the_manifest_boundary() -> None:
         )
 
 
+def test_splits_at_a_delimiter_immediately_after_an_exact_limit_token() -> None:
+    text = "а" * 448 + " б"
+
+    chunks = chunk_article(_article((BlockKind.PARAGRAPH, text)), SpeechRate.NORMAL, 448)
+
+    assert [_plain(chunk.ssml_text) for chunk in chunks] == ["а" * 448, "б"]
+    assert [chunk.pause_after_ms for chunk in chunks] == [120, 350]
+    assert " ".join(_plain(chunk.ssml_text) for chunk in chunks) == text
+
+
+@pytest.mark.parametrize(
+    "first_sentence",
+    [
+        "«Первое предложение!»",
+        '"Первое предложение?"',
+        "Первое предложение.)",
+        "Первое предложение.]",
+    ],
+)
+def test_treats_closing_quotes_and_brackets_as_part_of_a_sentence(
+    first_sentence: str,
+) -> None:
+    text = (
+        f"{first_sentence} "
+        "Второе предложение содержит достаточно обычных слов, чтобы не поместиться вместе."
+    )
+
+    chunks = chunk_article(_article((BlockKind.PARAGRAPH, text)), SpeechRate.NORMAL, 64)
+
+    assert _plain(chunks[0].ssml_text) == first_sentence
+    assert " ".join(_plain(chunk.ssml_text) for chunk in chunks) == text
+
+
 def test_long_block_reconstructs_exact_clean_text_without_empty_chunks() -> None:
     text = (
         "Первый фрагмент содержит ровно те слова, которые должны остаться. "
