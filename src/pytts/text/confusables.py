@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-_TOKEN = re.compile(r"[^\W_]+(?:-[^\W_]+)*", re.UNICODE)
+_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
 
 _LATIN_TO_CYRILLIC = str.maketrans(
     {

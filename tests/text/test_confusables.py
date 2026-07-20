@@ -9,6 +9,7 @@ from pytts.text.confusables import repair_mixed_scripts
         ("уkраинсĸий", "украинский"),
         ("мoсква и cтатья", "москва и статья"),
         ("FР-5", "FP-5"),
+        ("FРV-дронов", "FPV-дронов"),
         ("Bloomberg Москва", "Bloomberg Москва"),
         ("Cи", "Си"),
     ],
