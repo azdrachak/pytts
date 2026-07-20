@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Protocol
 
 import typer
 from rich.console import Console
@@ -15,17 +15,28 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
-from pytts.audio import AtomicMp3Writer
-from pytts.config import find_project_root
-from pytts.domain import ConversionRequest, SpeechRate
+from pytts.domain import ConversionRequest, ConversionResult, SpeechRate
 from pytts.errors import PyTTSError
-from pytts.model_store import ModelStore, load_model_spec
-from pytts.pipeline import ConversionPipeline, ProgressEvent, ProgressSink, ProgressStage
-from pytts.readers.input import InputReader
-from pytts.tts import SileroRuntime
 
 app = typer.Typer(add_completion=False, no_args_is_help=False)
 console = Console(stderr=True)
+
+
+class ProgressEvent(Protocol):
+    stage: str
+    completed: int | None
+    total: int | None
+    message: str | None
+    warning: bool
+
+
+ProgressSink = Callable[[ProgressEvent], None]
+
+
+class Pipeline(Protocol):
+    def list_voices(self) -> tuple[str, ...]: ...
+
+    def convert(self, request: ConversionRequest) -> ConversionResult: ...
 
 
 class RichProgressReporter:
@@ -40,7 +51,7 @@ class RichProgressReporter:
             console=target,
             transient=True,
         )
-        self._tasks: dict[ProgressStage, int] = {}
+        self._tasks: dict[str, int] = {}
         self._started = False
 
     def __call__(self, event: ProgressEvent) -> None:
@@ -50,10 +61,11 @@ class RichProgressReporter:
             if not self._started:
                 self._progress.start()
                 self._started = True
-            task_id = self._tasks.get(event.stage)
+            stage = str(event.stage)
+            task_id = self._tasks.get(stage)
             if task_id is None:
-                task_id = self._progress.add_task(event.stage.value, total=event.total)
-                self._tasks[event.stage] = task_id
+                task_id = self._progress.add_task(stage, total=event.total)
+                self._tasks[stage] = task_id
             self._progress.update(task_id, completed=event.completed, total=event.total)
         elif event.message and not event.warning:
             self._console.print(event.message)
@@ -64,7 +76,14 @@ class RichProgressReporter:
             self._started = False
 
 
-def build_pipeline(progress: ProgressSink) -> ConversionPipeline:
+def build_pipeline(progress: ProgressSink) -> Pipeline:
+    from pytts.audio import AtomicMp3Writer
+    from pytts.config import find_project_root
+    from pytts.model_store import ModelStore, load_model_spec
+    from pytts.pipeline import ConversionPipeline
+    from pytts.readers.input import InputReader
+    from pytts.tts import SileroRuntime
+
     spec = load_model_spec()
     store = ModelStore()
     return ConversionPipeline(
@@ -79,7 +98,7 @@ def build_pipeline(progress: ProgressSink) -> ConversionPipeline:
     )
 
 
-PipelineFactory = Callable[[ProgressSink], ConversionPipeline]
+PipelineFactory = Callable[[ProgressSink], Pipeline]
 _pipeline_factory: PipelineFactory = build_pipeline
 
 

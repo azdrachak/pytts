@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 from typer.testing import CliRunner
@@ -10,6 +12,8 @@ from pytts.domain import ConversionResult
 from pytts.errors import InputError, ModelError, SynthesisError
 
 runner = CliRunner()
+
+_TORCH_WARNING = "Failed to initialize NumPy"
 
 
 class FakePipeline:
@@ -136,3 +140,62 @@ def test_keyboard_interrupt_returns_130(monkeypatch: pytest.MonkeyPatch) -> None
     assert result.exit_code == 130
     assert "Interrupted" in result.stderr
     assert result.stdout == ""
+
+
+@pytest.mark.parametrize(
+    "entrypoint",
+    [
+        (str(Path(sys.executable).with_name("pytts")),),
+        (sys.executable, "-m", "pytts"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("arguments", "exit_code", "stdout_expected", "stderr_expected"),
+    [
+        (["--help"], 0, "Usage:", ""),
+        ([], 2, "", "INPUT is required"),
+        (["--speed", "warp"], 2, "", "Invalid value for '--speed'"),
+        (["article.md", "unexpected"], 2, "", "Got unexpected extra argument"),
+    ],
+)
+def test_parse_only_entrypoints_do_not_load_torch(
+    entrypoint: tuple[str, ...],
+    arguments: list[str],
+    exit_code: int,
+    stdout_expected: str,
+    stderr_expected: str,
+) -> None:
+    result = subprocess.run(
+        [*entrypoint, *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == exit_code
+    if stdout_expected:
+        assert stdout_expected in result.stdout
+    else:
+        assert result.stdout == ""
+    if stderr_expected:
+        assert stderr_expected in result.stderr
+    else:
+        assert result.stderr == ""
+    assert _TORCH_WARNING not in result.stderr
+
+
+def test_importing_cli_does_not_import_torch() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import pytts.cli; print('torch' in sys.modules)",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "False\n"
+    assert result.stderr == ""
