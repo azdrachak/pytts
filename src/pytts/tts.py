@@ -49,7 +49,9 @@ class SileroRuntime:
             raise ModelError(f"Could not move Silero model to CPU: {error}") from error
 
         try:
-            model.eval()
+            eval_method = getattr(model, "eval", None)
+            if callable(eval_method):
+                eval_method()
         except (KeyboardInterrupt, SystemExit):
             raise
         except Exception as error:

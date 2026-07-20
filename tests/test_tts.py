@@ -54,8 +54,60 @@ class FailingModel(FakeModel):
         raise RuntimeError("boom")
 
 
+class InferenceOnlyModel:
+    def __init__(self) -> None:
+        self.speakers = ["xenia"]
+        self.device: torch.device | None = None
+        self.calls: list[dict[str, object]] = []
+
+    def to(self, device: torch.device) -> InferenceOnlyModel:
+        self.device = device
+        return self
+
+    def apply_tts(self, **kwargs: object) -> torch.Tensor:
+        self.calls.append(kwargs)
+        return torch.tensor([0.0, 0.25, -0.25])
+
+
 def _chunk() -> SpeechChunk:
     return SpeechChunk('<speak><prosody rate="fast">Текст &amp; ещё</prosody></speak>', 350)
+
+
+def test_loads_and_synthesizes_inference_wrapper_without_eval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model = InferenceOnlyModel()
+    path = tmp_path / "v5_5_ru.pt"
+
+    class FakeImporter:
+        def __init__(self, source: str) -> None:
+            assert source == str(path)
+
+        def load_pickle(self, package: str, resource: str) -> InferenceOnlyModel:
+            assert (package, resource) == ("tts_models", "model")
+            return model
+
+    class FakeStore:
+        def ensure(self, *_: object) -> Path:
+            return path
+
+    monkeypatch.setattr(torch.package, "PackageImporter", FakeImporter)
+
+    runtime = SileroRuntime.load(FakeStore(), _spec())  # type: ignore[arg-type]
+    audio = runtime.synthesize(_chunk(), "xenia")
+
+    assert model.device == torch.device("cpu")
+    assert model.calls
+    assert audio.shape == (3,)
+
+
+def test_ignores_non_callable_eval_metadata() -> None:
+    model = InferenceOnlyModel()
+    model.eval = "inference wrapper metadata"  # type: ignore[attr-defined]
+
+    runtime = SileroRuntime(model, _spec())
+
+    assert runtime.speakers == ("xenia",)
 
 
 def test_prefers_manifest_voice_when_runtime_has_it() -> None:
