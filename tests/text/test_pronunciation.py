@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 import pytest
 
@@ -41,15 +42,24 @@ def test_symbol_expansion_does_not_add_space_before_punctuation() -> None:
         ("Коэффициент α равен единице.", "α"),
         ("Температура 🌡 высокая.", "🌡"),
         ("Цена в неизвестной валюте ₿.", "₿"),
+        ("Два * три.", "*"),
+        ("Путь А/Б.", "/"),
+        ("Один ⁂ два.", "⁂"),
     ],
 )
 def test_rejects_unhandled_letters_and_symbols(source: str, fragment: str) -> None:
-    with pytest.raises(InputError, match=repr(fragment)):
+    with pytest.raises(InputError, match=re.escape(repr(fragment))):
         _normalize(source)
 
 
 def test_override_can_make_other_alphabet_speakable() -> None:
     assert _normalize("Коэффициент α.", {"α": "альфа"}) == "Коэффициент альфа."
+
+
+def test_preserves_documented_russian_punctuation() -> None:
+    source = '«Текст», “пример” — да; [верно]… (точно)!'
+
+    assert _normalize(source) == source
 
 
 def test_preserves_blocks_and_is_idempotent() -> None:

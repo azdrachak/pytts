@@ -24,6 +24,12 @@ _SYMBOL_WORDS = {
     "@": "собака",
 }
 _EXPLICIT_FORBIDDEN = frozenset("%‰№°§&@#")
+_ALLOWED_PUNCTUATION = frozenset(
+    ".,;:!?…"
+    "-‐‑‒–—―"
+    "'\"«»„“”‘’"
+    "()[]"
+)
 
 
 def _normalize_symbols(text: str) -> str:
@@ -48,6 +54,8 @@ def _validate_speakable(text: str) -> None:
             and not _is_cyrillic_letter(character)
             or character in _EXPLICIT_FORBIDDEN
             or category in {"Sc", "Sm", "Sk", "So"}
+            or category.startswith("P")
+            and character not in _ALLOWED_PUNCTUATION
         )
         if invalid:
             start = max(0, index - 20)
