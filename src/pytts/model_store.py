@@ -170,37 +170,44 @@ class ModelStore:
         target = models / f"{spec.model_id}.pt"
         lock_path = target.with_name(target.name + ".lock")
         with _thread_lock_for(target):
-            with lock_path.open("a+b") as lock_file:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                lock_file = lock_path.open("a+b")
+            except OSError as error:
+                raise ModelError(f"Could not open model cache lock {lock_path}: {error}") from error
+            try:
                 try:
-                    if target.exists():
-                        try:
-                            self._verify(target, spec)
-                        except ModelError:
-                            raise
-                        except (KeyboardInterrupt, SystemExit):
-                            raise
-                        except Exception as error:
-                            raise ModelError(f"Could not validate cached model {target}: {error}") from error
-                        return target
-
-                    partial = target.with_name(f"{target.name}.{uuid4().hex}.download")
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                except OSError as error:
+                    raise ModelError(f"Could not acquire model cache lock {lock_path}: {error}") from error
+                if target.exists():
                     try:
-                        self._download(spec.url, partial, progress)
-                        self._verify(partial, spec)
-                        validate_package(partial)
-                        os.replace(partial, target)
+                        self._verify(target, spec)
                     except ModelError:
-                        _best_effort_unlink(partial)
                         raise
                     except (KeyboardInterrupt, SystemExit):
-                        _best_effort_unlink(partial)
                         raise
                     except Exception as error:
-                        _best_effort_unlink(partial)
-                        raise ModelError(
-                            f"Could not download or validate model {spec.url}: {error}"
-                        ) from error
+                        raise ModelError(f"Could not validate cached model {target}: {error}") from error
                     return target
-                finally:
-                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+                partial = target.with_name(f"{target.name}.{uuid4().hex}.download")
+                try:
+                    self._download(spec.url, partial, progress)
+                    self._verify(partial, spec)
+                    validate_package(partial)
+                    os.replace(partial, target)
+                except ModelError:
+                    _best_effort_unlink(partial)
+                    raise
+                except (KeyboardInterrupt, SystemExit):
+                    _best_effort_unlink(partial)
+                    raise
+                except Exception as error:
+                    _best_effort_unlink(partial)
+                    raise ModelError(f"Could not download or validate model {spec.url}: {error}") from error
+                return target
+            finally:
+                try:
+                    lock_file.close()
+                except OSError:
+                    pass

@@ -8,6 +8,7 @@ from urllib.error import URLError
 
 import pytest
 
+import pytts.model_store as model_store
 from pytts.errors import ModelError, ModelIntegrityError
 from pytts.model_store import ModelSpec, ModelStore, load_model_spec
 
@@ -279,6 +280,91 @@ def test_concurrent_callers_share_one_verified_download(
     assert results == [tmp_path / "models/v5_5_ru.pt"] * 2
     assert len(downloads) == 1
     assert not list((tmp_path / "models").glob("*.download"))
+
+
+def test_lock_open_failure_maps_to_model_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    original_open = Path.open
+
+    def reject_lock_open(path: Path, *args: object, **kwargs: object) -> object:
+        if path.name.endswith(".lock"):
+            raise OSError("cache is read-only")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", reject_lock_open)
+
+    with pytest.raises(ModelError, match="Could not open model cache lock.*read-only"):
+        ModelStore(cache_root=tmp_path).ensure(_spec(), lambda path: None)
+
+
+def test_lock_acquisition_failure_maps_to_model_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def reject_lock(_: int, operation: int) -> None:
+        assert operation == model_store.fcntl.LOCK_EX
+        raise OSError("lock is unavailable")
+
+    monkeypatch.setattr(model_store.fcntl, "flock", reject_lock)
+
+    with pytest.raises(ModelError, match="Could not acquire model cache lock.*unavailable"):
+        ModelStore(cache_root=tmp_path).ensure(_spec(), lambda path: None)
+
+
+def test_lock_release_failure_does_not_mask_a_successful_cache_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = b"package bytes"
+    real_flock = model_store.fcntl.flock
+
+    def fail_only_explicit_unlock(descriptor: int, operation: int) -> None:
+        if operation == model_store.fcntl.LOCK_UN:
+            raise OSError("lock release failed")
+        real_flock(descriptor, operation)
+
+    def download(_: str, path: Path, __: object) -> None:
+        path.write_bytes(payload)
+
+    monkeypatch.setattr(model_store.fcntl, "flock", fail_only_explicit_unlock)
+    monkeypatch.setattr(ModelStore, "_download", staticmethod(download))
+
+    assert ModelStore(cache_root=tmp_path).ensure(_spec(), lambda path: None).read_bytes() == payload
+
+
+@pytest.mark.parametrize("failure", ["network", "integrity", "interrupt"])
+def test_lock_release_failure_does_not_mask_primary_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    real_flock = model_store.fcntl.flock
+
+    def fail_only_explicit_unlock(descriptor: int, operation: int) -> None:
+        if operation == model_store.fcntl.LOCK_UN:
+            raise OSError("lock release failed")
+        real_flock(descriptor, operation)
+
+    def fail(_: str, path: Path, __: object) -> None:
+        if failure == "network":
+            raise URLError("offline")
+        if failure == "integrity":
+            path.write_bytes(b"unexpected bytes")
+            return
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(model_store.fcntl, "flock", fail_only_explicit_unlock)
+    monkeypatch.setattr(ModelStore, "_download", staticmethod(fail))
+
+    if failure == "network":
+        expected_error: type[BaseException] = ModelError
+        match = "offline"
+    elif failure == "integrity":
+        expected_error = ModelIntegrityError
+        match = "SHA-256 mismatch"
+    else:
+        expected_error = KeyboardInterrupt
+        match = None
+
+    with pytest.raises(expected_error, match=match) as captured:
+        ModelStore(cache_root=tmp_path).ensure(_spec(), lambda path: None)
+
+    assert "lock release failed" not in str(captured.value)
 
 
 def test_cleanup_failure_does_not_mask_primary_download_error(
