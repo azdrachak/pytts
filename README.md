@@ -44,7 +44,7 @@ the expected and actual values and explains the deliberate manifest-update proce
 The repeat SHA-256 pass reads the roughly 100 MB model and can add a short startup delay; this is the
 intentional integrity tradeoff for the MVP.
 
-## Abbreviations
+## Pronunciation configuration
 
 The root `pytts.yaml` is versioned and editable:
 
@@ -55,11 +55,21 @@ abbreviations:
   "г-жа": "госпожа"
   "ув.": "уважаемый"
   "т.е.": "то есть"
+transliterations:
+  "Brent": "Брент"
+  "Bloomberg": "Блумберг"
+  "New York Times": "Нью-Йорк таймс"
 ```
 
-Replacements are literal, case-insensitive, longest-first, token-bounded, and one-pass. Only the
-first letter's case is transferred. An explicit `--config` replaces the root mapping rather than
-merging with it.
+`abbreviations` expands literal Russian abbreviations. `transliterations` supplies exact spoken
+forms for foreign names, brands, non-Cyrillic letters, or symbols before the general normalizer.
+Both mappings are case-insensitive, longest-first, token-bounded, and one-pass. An explicit
+`--config` replaces the root config rather than merging with it.
+
+Before Silero, pytts converts common dates, years, integers, decimals, currencies, percentages,
+ranges, letter-number codes, and documented semantic symbols to Russian words. Mixed-script PDF
+lookalikes are repaired contextually. Unsupported letters or symbols stop conversion before model
+loading so they cannot disappear silently from the audio.
 
 ## Output and errors
 
@@ -72,16 +82,21 @@ synthesis/encoding, and 130 for interruption. `--debug` includes a traceback.
 
 - Russian only. Low Cyrillic content emits a warning but is not blocked; there is no language
   validation.
-- Latin tokens in otherwise Russian input can be rejected by the Silero SSML parser; map them through
-  abbreviations or write them in Cyrillic.
+- General foreign-word transliteration is approximate; use `transliterations` for exact names.
+- Uppercase Latin groups of 1–5 letters are spelled by letter names, so `NASA` is read as
+  `эн эй эс эй`; override it in `transliterations` when word-like pronunciation is preferred.
+- Greek and other non-Cyrillic letters, emoji, and unknown semantic symbols fail closed unless an
+  exact `transliterations` replacement makes them speakable.
+- Numeric shapes `DD.MM.YYYY` and `DD/MM/YYYY` are always treated as calendar dates. Version-like
+  triples require an exact replacement or source rewrite; invalid calendar dates fail closed.
+- Context rules cover the documented dates, years, currency, ranges and two compound-adjective
+  families; ambiguous Russian syntax can still produce a non-ideal case.
 - PDF requires an existing text layer; there is no OCR.
 - Complex multi-column PDF reading order is not guaranteed; the target is a browser-printed article.
 - PDF headings are a font-size heuristic; uniform browser-print typography gets paragraph pauses.
 - Input is limited to articles, not books or other long-form document workflows.
 - Speech chunks contain at most 448 clean text characters.
 - URLs, code, images, metadata, tables, footnotes, and raw HTML are discarded as non-article content.
-- Numbers, dates, currencies, percentages, and ranges are preserved literally and are not converted
-  to words, so pronunciation and grammatical agreement depend on Silero.
 - Context-sensitive abbreviation gender and morphology are outside this release.
 
 ## Model license

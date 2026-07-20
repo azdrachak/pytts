@@ -45,9 +45,12 @@ def test_real_model_synthesizes_valid_mp3(tmp_path: Path) -> None:
     assert info.length > 0.5
 
 
-def test_real_cli_synthesizes_smoke_fixture_to_valid_mp3(tmp_path: Path) -> None:
-    output = tmp_path / "smoke.mp3"
-    source = Path(__file__).parent / "fixtures" / "smoke.md"
+@pytest.mark.parametrize("fixture_name", ["smoke.md", "pronunciation.md"])
+def test_real_cli_synthesizes_fixture_to_valid_mp3(
+    tmp_path: Path, fixture_name: str
+) -> None:
+    output = tmp_path / f"{Path(fixture_name).stem}.mp3"
+    source = Path(__file__).parent / "fixtures" / fixture_name
 
     result = subprocess.run(
         [sys.executable, "-m", "pytts", str(source), "--output", str(output)],

@@ -49,10 +49,22 @@ environment or listening review.
 - Generated artifacts are ignored. `.DS_Store` remains untracked user/system state and is intentionally
   excluded from acceptance commits.
 
-## Pending manual acceptance
+## Pronunciation normalization follow-up (2026-07-20)
 
-The following checks are intentionally not claimed as complete:
-
-- Convert and listen to one representative personal browser-saved PDF and one Markdown article.
-
-The controller is proceeding with these manual checks and will update this record with their results.
+- The final network-free gate reported `291 passed, 3 deselected, 6 warnings in 2.97s`; Ruff
+  reported `All checks passed!`, `uv lock --check` resolved 54 packages successfully, and
+  `git diff --check` printed nothing.
+- With `PYTTS_RUN_SILERO=1` and `HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` set to
+  `http://127.0.0.1:9`, the real-model gate reported `3 passed, 290 deselected, 7 warnings in
+  5.18s`. The verified cached model required no download.
+- The supplied Safari browser-print PDF produced `artifacts/acceptance-browser-print.mp3`: 476.38
+  seconds, mono, 48,000 Hz, 96,000 bit/s, and 5,716,512 bytes. No `.mp3.part` remained.
+- The complete post-normalization control text was:
+  `Проверка произношения`
+  `девятнадцатого июля две тысячи двадцать шестого года показатель вырос на пятнадцать процентов, сумма составила одна тысяча пятьсот рублей, а диапазон оказался от пяти до семи единиц.`
+  `Цена Брент преодолела девяностодолларовый барьер. На сто сорок второй день пятидесятишестилетний автор упомянул эф шестнадцать, эф пи ви и эс триста.`
+  `Диапазоны: от пятнадцати до двадцати процентов и от пяти до семи долларов. Символы: номер пять, двадцать градусов Цельсия, два умножить на три равно шесть, плюс-минус пять, семь промилле, параграф два.`
+- The user's exact listening observation was: «Всё ок, небольшие погрешности ударения в словах
+  приемлемы».
+- Known residual pronunciation issues: minor word-stress inaccuracies were observed and accepted;
+  no specific mispronounced token was identified.
