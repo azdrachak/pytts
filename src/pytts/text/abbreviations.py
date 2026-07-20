@@ -5,6 +5,8 @@ from collections.abc import Mapping
 
 from pytts.domain import Article, TextBlock
 
+_URL = r"\b(?:https?://|www\.)\S+"
+
 
 class AbbreviationExpander:
     """Expand configured abbreviations literally, once, within token boundaries."""
@@ -16,7 +18,7 @@ class AbbreviationExpander:
                 re.escape(key) for key in sorted(mapping, key=len, reverse=True)
             )
             self._pattern = re.compile(
-                rf"(?<![^\W_])(?:{alternatives})(?![^\W_])",
+                rf"(?P<url>{_URL})|(?<![^\W_])(?:{alternatives})(?![^\W_])",
                 re.IGNORECASE | re.UNICODE,
             )
         else:
@@ -24,8 +26,11 @@ class AbbreviationExpander:
 
     def _replace(self, match: re.Match[str]) -> str:
         source = match.group(0)
-        replacement = self._replacements[source.casefold()]
-        if source[:1].isupper():
+        replacement = self._replacements.get(source.casefold())
+        if replacement is None:
+            return source
+        first_letter = next((character for character in source if character.isalpha()), "")
+        if first_letter.isupper():
             return replacement[:1].upper() + replacement[1:]
         return replacement
 

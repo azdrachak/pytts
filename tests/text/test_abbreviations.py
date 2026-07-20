@@ -37,6 +37,21 @@ def test_escapes_regex_metacharacters_in_keys() -> None:
     assert _expand("a+b. aab.", {"a+b.": "literal"}) == "literal aab."
 
 
+def test_does_not_expand_abbreviations_inside_urls() -> None:
+    assert _expand(
+        "Ув. https://example.test/ув./docs, г-н.",
+        {"ув.": "уважаемый", "г-н": "господин"},
+    ) == "Уважаемый https://example.test/ув./docs, господин."
+
+
+def test_leaves_unicode_ignorecase_match_without_casefolded_key_unchanged() -> None:
+    assert _expand("İ. i.", {"i.": "item"}) == "İ. item"
+
+
+def test_transfers_case_from_first_alphabetic_character() -> None:
+    assert _expand("(«Ув.)", {"«ув.": "уважаемый"}) == "(Уважаемый)"
+
+
 def test_replacements_are_not_scanned_again() -> None:
     assert _expand("а.", {"а.": "б.", "б.": "в"}) == "б."
 
