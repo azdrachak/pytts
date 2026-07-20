@@ -20,6 +20,9 @@ dependencies = [
   "typer",
 ]
 
+[project.scripts]
+pytts = "pytts.cli:app"
+
 [dependency-groups]
 dev = [
   "mutagen",
