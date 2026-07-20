@@ -7,7 +7,7 @@ macOS. It uses Silero `v5_5_ru` on CPU; article text and audio never leave the c
 
 - Apple Silicon macOS
 - [uv](https://docs.astral.sh/uv/)
-- network access only for the first model download
+- network access for initial uv/dependency setup and the first model download
 
 ```bash
 uv sync --group dev

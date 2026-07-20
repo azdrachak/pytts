@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 from types import TracebackType
 
 import torch
@@ -53,13 +55,32 @@ class Writer:
         pass
 
 
+def test_e2e_fixture_resolves_outside_project_cwd(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            str(Path(__file__).resolve()),
+            "-k",
+            "markdown_to_audio_contract",
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_markdown_to_audio_contract(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     project_root.mkdir()
     (project_root / "pytts.yaml").write_text(
         'version: 1\nabbreviations:\n  "ув.": "уважаемый"\n', encoding="utf-8"
     )
-    source = Path("tests/fixtures/smoke.md").resolve()
+    source = Path(__file__).parent / "fixtures" / "smoke.md"
     runtime = Runtime()
     writers: list[Writer] = []
 

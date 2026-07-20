@@ -23,3 +23,5 @@
 - The smoke fixture now uses `Проверка синтеза`; the network-free E2E test preserves this contract.
 - Re-run the two real acceptance tests with `PYTTS_RUN_SILERO=1 uv run pytest
   tests/test_silero_integration.py -v`.
+- Detailed controller-run acceptance evidence and outstanding manual checks are recorded in
+  `docs/superpowers/verification/2026-07-19-pytts-mvp-acceptance.md`.
