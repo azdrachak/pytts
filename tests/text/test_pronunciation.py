@@ -43,7 +43,6 @@ def test_symbol_expansion_does_not_add_space_before_punctuation() -> None:
         ("Температура 🌡 высокая.", "🌡"),
         ("Цена в неизвестной валюте ₿.", "₿"),
         ("Два * три.", "*"),
-        ("Путь А/Б.", "/"),
         ("Один ⁂ два.", "⁂"),
     ],
 )
@@ -54,6 +53,12 @@ def test_rejects_unhandled_letters_and_symbols(source: str, fragment: str) -> No
 
 def test_override_can_make_other_alphabet_speakable() -> None:
     assert _normalize("Коэффициент α.", {"α": "альфа"}) == "Коэффициент альфа."
+
+
+def test_expands_slash_as_spoken_alternative() -> None:
+    assert _normalize("освобождении/взятии и А/Б") == (
+        "освобождении или взятии и А или Б"
+    )
 
 
 def test_preserves_documented_russian_punctuation() -> None:

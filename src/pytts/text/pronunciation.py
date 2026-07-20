@@ -22,6 +22,7 @@ _SYMBOL_WORDS = {
     "№": "номер",
     "&": "и",
     "@": "собака",
+    "/": "или",
 }
 _EXPLICIT_FORBIDDEN = frozenset("%‰№°§&@#")
 _ALLOWED_PUNCTUATION = frozenset(
