@@ -52,24 +52,26 @@ The root `pytts.yaml` is versioned and editable:
 version: 1
 abbreviations:
   "г-н": "господин"
-  "г-жа": "госпожа"
-  "ув.": "уважаемый"
   "т.е.": "то есть"
+  "ЧМ": "чемпионат мира"
+  "ув.": ""            # a blank value removes the token from speech
 transliterations:
   "Brent": "Брент"
-  "Bloomberg": "Блумберг"
   "New York Times": "Нью-Йорк таймс"
 ```
 
 `abbreviations` expands literal Russian abbreviations. `transliterations` supplies exact spoken
 forms for foreign names, brands, non-Cyrillic letters, or symbols before the general normalizer.
-Both mappings are case-insensitive, longest-first, token-bounded, and one-pass. An explicit
-`--config` replaces the root config rather than merging with it.
+Both mappings are case-insensitive, longest-first, token-bounded, and one-pass. A blank value (for
+example `"ув.": ""`) deletes the matched token instead of expanding it, which suits filler words
+with no correct spoken form. An explicit `--config` replaces the root config rather than merging
+with it.
 
-Before Silero, pytts converts common dates, years, integers, decimals, currencies, percentages,
-ranges, letter-number codes, and documented semantic symbols to Russian words. Mixed-script PDF
-lookalikes are repaired contextually. Unsupported letters or symbols stop conversion before model
-loading so they cannot disappear silently from the audio.
+Before Silero, pytts converts common dates, years, decades (`1990-х`), Roman-numeral centuries
+(`XX века`), integers, decimals, currencies, percentages, ranges, letter-number codes, and
+documented semantic symbols to Russian words. Mixed-script PDF lookalikes are repaired contextually.
+Unsupported letters or symbols stop conversion before model loading so they cannot disappear silently
+from the audio.
 
 ## Output and errors
 
@@ -91,6 +93,10 @@ output. Exit codes are 2 for usage, 3 for input/config/output-path validation, 4
   triples require an exact replacement or source rewrite; invalid calendar dates fail closed.
 - Context rules cover the documented dates, years, currency, ranges and two compound-adjective
   families; ambiguous Russian syntax can still produce a non-ideal case.
+- Roman numerals are read only directly before a century noun (`XX века` → `двадцатого века`);
+  other uses (`том XIV`, monarch names) are spelled letter by letter.
+- Only unit and multiplier abbreviations you configure (`км`, `млн`, …) are expanded, and their case
+  agreement after a number is approximate.
 - PDF requires an existing text layer; there is no OCR.
 - Complex multi-column PDF reading order is not guaranteed; the target is a browser-printed article.
 - PDF headings are a font-size heuristic; uniform browser-print typography gets paragraph pauses.
