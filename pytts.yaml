@@ -4,7 +4,7 @@ abbreviations:
   # honorifics and editorial forms
   "г-н": "господин"
   "г-жа": "госпожа"
-  "ув.": "уважаемый"
+  "ув.": ""            # ироничный тик автора — удаляем, смысл не теряется
   "им.": "имени"
 
   # dotted abbreviations (expansion also removes the trailing false pause)

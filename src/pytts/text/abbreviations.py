@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pytts.domain import Article, TextBlock
 
 _URL = r"\b(?:https?://|www\.)\S+"
+_WHITESPACE = re.compile(r"\s+")
 
 
 class AbbreviationExpander:
@@ -39,8 +40,13 @@ class AbbreviationExpander:
     def expand_article(self, article: Article) -> Article:
         if self._pattern is None:
             return article
-        blocks = tuple(
-            TextBlock(kind=block.kind, text=self._pattern.sub(self._replace, block.text))
-            for block in article.blocks
-        )
-        return Article(source=article.source, blocks=blocks)
+        blocks: list[TextBlock] = []
+        for block in article.blocks:
+            # Blank replacements delete a token, so tidy the surrounding spaces
+            # and drop a block that a deletion emptied entirely.
+            text = _WHITESPACE.sub(" ", self._pattern.sub(self._replace, block.text)).strip()
+            if text:
+                blocks.append(TextBlock(kind=block.kind, text=text))
+        if not blocks:
+            return article
+        return Article(source=article.source, blocks=tuple(blocks))

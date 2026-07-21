@@ -65,3 +65,13 @@ def test_replacements_are_not_scanned_again() -> None:
 def test_empty_mapping_returns_equal_article() -> None:
     article = Article(Path("a.md"), (TextBlock(BlockKind.HEADING, "Заголовок"),))
     assert AbbreviationExpander({}).expand_article(article) == article
+
+
+def test_blank_replacement_removes_token_and_tidies_spacing() -> None:
+    assert _expand("Ув. друзья, привет.", {"ув.": ""}) == "друзья, привет."
+    assert _expand("Здравствуйте, ув. Ольга.", {"ув.": ""}) == "Здравствуйте, Ольга."
+
+
+def test_block_emptied_by_removal_falls_back_to_original() -> None:
+    article = Article(Path("a.md"), (TextBlock(BlockKind.PARAGRAPH, "Ув."),))
+    assert AbbreviationExpander({"ув.": ""}).expand_article(article) == article

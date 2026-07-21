@@ -85,18 +85,30 @@ def test_config_without_transliterations_is_backward_compatible(tmp_path: Path) 
     assert dict(config.transliterations) == {}
 
 
+def test_blank_value_marks_token_for_removal(tmp_path: Path) -> None:
+    path = tmp_path / "pytts.yaml"
+    path.write_text(
+        'version: 1\nabbreviations:\n  "ув.": ""\n  "г-н": "господин"\n'
+        'transliterations:\n  Foo: "   "\n',
+        encoding="utf-8",
+    )
+
+    config = load_config(path, tmp_path)
+
+    assert dict(config.abbreviations) == {"ув.": "", "г-н": "господин"}
+    assert dict(config.transliterations) == {"Foo": ""}
+
+
 @pytest.mark.parametrize(
     "content",
     [
         "version: 1\nabbreviations: {}\ntransliterations: []\n",
-        'version: 1\nabbreviations: {}\ntransliterations:\n  Brent: ""\n',
         (
             "version: 1\nabbreviations: {}\ntransliterations:\n"
             "  Brent: один\n  BRENT: два\n"
         ),
         'version: 1\nabbreviations: {}\ntransliterations:\n  "": пустой\n',
         'version: 1\nabbreviations: {}\ntransliterations:\n  "   ": пустой\n',
-        'version: 1\nabbreviations: {}\ntransliterations:\n  Brent: "   "\n',
     ],
 )
 def test_invalid_transliterations_are_rejected(tmp_path: Path, content: str) -> None:
@@ -114,12 +126,10 @@ def test_invalid_transliterations_are_rejected(tmp_path: Path, content: str) -> 
         "version: true\nabbreviations: {}\n",
         "version: 1\nunknown: true\nabbreviations: {}\n",
         "version: 1\nabbreviations: []\n",
-        'version: 1\nabbreviations:\n  "ув.": ""\n',
         'version: 1\nabbreviations:\n  "ув.": null\n',
         'version: 1\nabbreviations:\n  "УВ.": "один"\n  "ув.": "два"\n',
         'version: 1\nabbreviations:\n  "": "пустой"\n',
         'version: 1\nabbreviations:\n  "   ": "пустой"\n',
-        'version: 1\nabbreviations:\n  "ув.": "   "\n',
     ],
 )
 def test_invalid_config_is_rejected(tmp_path: Path, content: str) -> None:

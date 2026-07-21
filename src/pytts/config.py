@@ -61,13 +61,14 @@ def _validate_mapping(
     for key, replacement in value.items():
         if not isinstance(key, str) or not key.strip():
             raise ConfigError(f"{path}: {singular} keys must be non-empty strings")
-        if not isinstance(replacement, str) or not replacement.strip():
-            raise ConfigError(f"{path}: {singular} replacements must be non-empty strings")
+        if not isinstance(replacement, str):
+            raise ConfigError(f"{path}: {singular} replacements must be strings")
         normalized = key.casefold()
         if normalized in folded:
             raise ConfigError(f"{path}: duplicate {singular} ignoring case: {key}")
         folded.add(normalized)
-        result[key] = replacement
+        # A blank replacement marks the token for removal from spoken text.
+        result[key] = replacement if replacement.strip() else ""
     return MappingProxyType(result)
 
 
