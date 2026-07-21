@@ -70,8 +70,8 @@ with it.
 Before Silero, pytts converts common dates, years, decades (`1990-х`), Roman-numeral centuries
 (`XX века`), integers, decimals, currencies, percentages, ranges, letter-number codes, and
 documented semantic symbols to Russian words. Mixed-script PDF lookalikes are repaired contextually.
-Unsupported letters or symbols stop conversion before model loading so they cannot disappear silently
-from the audio.
+Any letter or symbol Silero cannot voice is dropped rather than aborting the run, and a single
+warning lists each removed character with its surrounding context so you can find it in the source.
 
 ## Output and errors
 
@@ -87,8 +87,8 @@ output. Exit codes are 2 for usage, 3 for input/config/output-path validation, 4
 - General foreign-word transliteration is approximate; use `transliterations` for exact names.
 - Uppercase Latin groups of 1–5 letters are spelled by letter names, so `NASA` is read as
   `эн эй эс эй`; override it in `transliterations` when word-like pronunciation is preferred.
-- Greek and other non-Cyrillic letters, emoji, and unknown semantic symbols fail closed unless an
-  exact `transliterations` replacement makes them speakable.
+- Greek and other non-Cyrillic letters, emoji, and unknown semantic symbols are dropped with a
+  warning (character plus context) unless an exact `transliterations` replacement makes them speakable.
 - Numeric shapes `DD.MM.YYYY` and `DD/MM/YYYY` are always treated as calendar dates. Version-like
   triples require an exact replacement or source rewrite; invalid calendar dates fail closed.
 - Context rules cover the documented dates, years, currency, ranges and two compound-adjective
