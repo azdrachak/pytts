@@ -153,3 +153,47 @@ def test_distinguishes_prose_dash_from_numeric_minus(
     source: str, expected: str
 ) -> None:
     assert _normalize(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("39+%", "более тридцати девяти процентов"),
+        (
+            "рост 39+% в год",
+            "рост более тридцати девяти процентов в год",
+        ),
+    ],
+)
+def test_normalizes_open_ended_percent(source: str, expected: str) -> None:
+    assert _normalize(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("в 1990-х годах", "в тысяча девятьсот девяностых годах"),
+        ("в конце 1970-х", "в конце тысяча девятьсот семидесятых"),
+        ("в начале 1980-х", "в начале тысяча девятьсот восьмидесятых"),
+        ("в 80-х", "в восьмидесятых"),
+        ("2020-х", "две тысячи двадцатых"),
+        ("1990-ми", "тысяча девятьсот девяностыми"),
+    ],
+)
+def test_normalizes_decades_as_plural_ordinals(source: str, expected: str) -> None:
+    assert _normalize(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # round-number singular ordinals must stay singular, not become decades
+        ("20-й век", "двадцатый век"),
+        ("к 90-му дню", "к девяностому дню"),
+        ("142-й день", "сто сорок второй день"),
+    ],
+)
+def test_singular_ordinals_of_round_numbers_are_not_decades(
+    source: str, expected: str
+) -> None:
+    assert _normalize(source) == expected

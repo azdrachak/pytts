@@ -30,10 +30,16 @@ def _words(
     to: Literal["cardinal", "ordinal"],
     case: RussianCase,
     gender: RussianGender,
+    plural: bool = False,
 ) -> str:
     value = _number_value(raw)
     try:
-        result = num2words(value, lang="ru", to=to, case=case, gender=gender)
+        if to == "ordinal":
+            result = num2words(
+                value, lang="ru", to=to, case=case, gender=gender, plural=plural
+            )
+        else:
+            result = num2words(value, lang="ru", to=to, case=case, gender=gender)
     except (KeyboardInterrupt, SystemExit):
         raise
     except Exception as error:
@@ -57,8 +63,9 @@ def ordinal(
     *,
     case: RussianCase = "n",
     gender: RussianGender = "m",
+    plural: bool = False,
 ) -> str:
-    return _words(raw, to="ordinal", case=case, gender=gender)
+    return _words(raw, to="ordinal", case=case, gender=gender, plural=plural)
 
 
 def decimal_words(integer: str, fraction: str) -> str:

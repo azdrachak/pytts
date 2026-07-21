@@ -38,6 +38,14 @@ def test_generates_verified_ordinal_cases_and_genders() -> None:
     assert ordinal(1, gender="f") == "первая"
 
 
+def test_generates_plural_ordinals_for_decades() -> None:
+    assert ordinal(90, case="g", plural=True) == "девяностых"
+    assert ordinal(1990, case="g", plural=True) == "тысяча девятьсот девяностых"
+    assert ordinal(1990, case="i", plural=True) == "тысяча девятьсот девяностыми"
+    # default remains singular
+    assert ordinal(90, case="g") == "девяностого"
+
+
 def test_preserves_decimal_precision_from_text() -> None:
     assert decimal_words("3", "14") == "три целых четырнадцать сотых"
     assert decimal_words("5", "10") == "пять целых десять сотых"

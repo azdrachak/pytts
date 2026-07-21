@@ -71,6 +71,16 @@ _ORDINAL = re.compile(
     rf"(?P<suffix>{'|'.join(sorted(_ORDINAL_SUFFIXES, key=len, reverse=True))})(?!\w)",
     re.IGNORECASE,
 )
+# Decade forms like "1990-х"/"80-х": only plural-unambiguous suffixes, and only
+# numbers ending in a zero, so singular ordinals such as "20-й"/"90-м" are left
+# to _ORDINAL. "-е"/"-м" are intentionally excluded because they collide with
+# singular neuter/prepositional ordinals of round numbers ("20-е число").
+_DECADE_CASES = {"ыми": "i", "ых": "g", "ми": "i", "х": "g"}
+_DECADE = re.compile(
+    rf"(?<!\w)(?P<number>\d{{1,3}}0)-"
+    rf"(?P<suffix>{'|'.join(sorted(_DECADE_CASES, key=len, reverse=True))})(?!\w)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +144,9 @@ _CURRENCY_SUFFIX = re.compile(
     rf"(?<![\w.,])(?P<sign>{_SIGN})?(?P<amount>{_AMOUNT})\s*"
     rf"(?P<currency>{_CURRENCY_TOKEN})(?!\w)",
     re.IGNORECASE,
+)
+_PERCENT_PLUS = re.compile(
+    rf"(?<![\w.,])(?P<number>{_INTEGER})\s*\+\s*%(?!\w)"
 )
 _PERCENT = re.compile(
     rf"(?<![\w.,])(?P<sign>{_SIGN})?"
@@ -209,12 +222,14 @@ class NumericNormalizer:
         text = _PERCENT_RANGE.sub(self._percent_range, text)
         text = _CURRENCY_PREFIX.sub(self._currency_amount, text)
         text = _CURRENCY_SUFFIX.sub(self._currency_amount, text)
+        text = _PERCENT_PLUS.sub(self._percent_plus, text)
         text = _PERCENT.sub(self._percent, text)
         text = _EXPLICIT_RANGE.sub(self._explicit_range, text)
         text = _BARE_RANGE.sub(self._bare_range, text)
         text = _CODE.sub(self._code, text)
         text = _COMPOUND_YEARS.sub(self._compound_years, text)
         text = _COMPOUND_DOLLARS.sub(self._compound_dollars, text)
+        text = _DECADE.sub(self._decade, text)
         text = _ORDINAL.sub(self._ordinal, text)
         text = _DEGREES.sub(self._degrees, text)
         text = _DECIMAL.sub(self._decimal, text)
@@ -271,6 +286,13 @@ class NumericNormalizer:
         forms = ("процент", "процента", "процентов")
         words = f"{cardinal(raw)} {noun_form(value, forms)}"
         return _with_sign(words, match.group("sign"))
+
+    def _percent_plus(self, match: re.Match[str]) -> str:
+        return f"более {cardinal(match.group('number'), case='g')} процентов"
+
+    def _decade(self, match: re.Match[str]) -> str:
+        case = _DECADE_CASES[match.group("suffix").casefold()]
+        return ordinal(match.group("number"), case=case, plural=True)
 
     def _explicit_range(self, match: re.Match[str]) -> str:
         return _range_words(match.group("left"), match.group("right"))
