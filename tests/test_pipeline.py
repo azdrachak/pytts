@@ -174,17 +174,40 @@ def test_normalization_failure_precedes_model_and_writer(tmp_path: Path) -> None
         FakeRuntime(),
         [],
         writers,
-        reader=FakeInputReader("Значение α."),
+        reader=FakeInputReader("Дата 10.20.2021 неверна."),
         runtime_calls=runtime_calls,
     )
     source = tmp_path / "article.md"
     source.write_text("source", encoding="utf-8")
 
-    with pytest.raises(InputError, match="α"):
+    with pytest.raises(InputError, match="Invalid calendar date"):
         pipeline.convert(ConversionRequest(source))
 
     assert not runtime_calls
     assert not writers
+
+
+def test_unspeakable_character_warns_but_still_converts(tmp_path: Path) -> None:
+    events: list[ProgressEvent] = []
+    writers: list[FakeWriter] = []
+    runtime = FakeRuntime()
+    pipeline = _pipeline(
+        tmp_path,
+        runtime,
+        events,
+        writers,
+        reader=FakeInputReader("Коэффициент α важен."),
+    )
+    source = tmp_path / "article.md"
+    source.write_text("source", encoding="utf-8")
+
+    pipeline.convert(ConversionRequest(source))
+
+    assert writers[0].committed
+    assert "α" not in " ".join(runtime.chunks)
+    assert any(
+        event.warning and event.message and "'α'" in event.message for event in events
+    )
 
 
 def test_chunks_post_normalization_text_with_requested_ssml_speed(

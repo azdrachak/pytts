@@ -1,10 +1,8 @@
 from pathlib import Path
-import re
 
 import pytest
 
 from pytts.domain import Article, BlockKind, TextBlock
-from pytts.errors import InputError
 from pytts.text.pronunciation import PronunciationNormalizer
 
 
@@ -14,7 +12,7 @@ def _article(text: str) -> Article:
 
 def _normalize(text: str, mapping: dict[str, str] | None = None) -> str:
     normalizer = PronunciationNormalizer(mapping or {})
-    return normalizer.normalize_article(_article(text)).blocks[0].text
+    return normalizer.normalize_article(_article(text)).article.blocks[0].text
 
 
 def test_applies_override_then_numbers_then_remaining_latin() -> None:
@@ -46,9 +44,22 @@ def test_symbol_expansion_does_not_add_space_before_punctuation() -> None:
         ("Один ⁂ два.", "⁂"),
     ],
 )
-def test_rejects_unhandled_letters_and_symbols(source: str, fragment: str) -> None:
-    with pytest.raises(InputError, match=re.escape(repr(fragment))):
-        _normalize(source)
+def test_strips_unspeakable_characters_and_warns(source: str, fragment: str) -> None:
+    result = PronunciationNormalizer({}).normalize_article(_article(source))
+
+    assert fragment not in result.article.blocks[0].text
+    assert result.warning is not None
+    assert repr(fragment) in result.warning
+
+
+def test_strip_warning_includes_surrounding_context() -> None:
+    result = PronunciationNormalizer({}).normalize_article(
+        _article("Коэффициент α равен единице.")
+    )
+
+    assert result.warning is not None
+    assert "'α'" in result.warning
+    assert "Коэффициент" in result.warning
 
 
 def test_override_can_make_other_alphabet_speakable() -> None:
@@ -77,8 +88,8 @@ def test_preserves_blocks_and_is_idempotent() -> None:
     )
     normalizer = PronunciationNormalizer({"Brent": "Брент"})
     once = normalizer.normalize_article(article)
-    twice = normalizer.normalize_article(once)
-    assert [block.kind for block in once.blocks] == [
+    twice = normalizer.normalize_article(once.article)
+    assert [block.kind for block in once.article.blocks] == [
         BlockKind.HEADING,
         BlockKind.PARAGRAPH,
     ]

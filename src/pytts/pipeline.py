@@ -163,7 +163,11 @@ class ConversionPipeline:
         normalized = PronunciationNormalizer(config.transliterations).normalize_article(
             expanded
         )
-        chunks = chunk_article(normalized, request.rate, self._spec.max_text_chars)
+        if normalized.warning:
+            self._emit(ProgressStage.CLEAN, message=normalized.warning, warning=True)
+        chunks = chunk_article(
+            normalized.article, request.rate, self._spec.max_text_chars
+        )
         self._emit(ProgressStage.CHUNK, completed=len(chunks), total=len(chunks))
 
         runtime = self._runtime()
