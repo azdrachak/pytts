@@ -34,6 +34,34 @@ _MONTHS = {
 }
 _MONTH_NUMBERS = {name: number for number, name in _MONTHS.items()}
 
+_ROMAN_VALUES = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+_ROMAN_CANONICAL = re.compile(
+    r"M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})"
+)
+# Roman numerals are only resolved before a century noun, where they are
+# unambiguous; a bare "XX" (e.g. "XX съезд") is left for later Latin spelling to
+# avoid misreading Latin words made of Roman letters ("MIX", "DID").
+_CENTURY_CASES = {"век": "n", "века": "g", "веке": "p", "веком": "i"}
+_ROMAN_CENTURY = re.compile(
+    r"(?<!\w)(?P<roman>[IVXLCDM]+)\s+(?P<noun>веком|века|веке|век)(?!\w)"
+)
+
+
+def _roman_to_int(token: str) -> int | None:
+    if not token or not _ROMAN_CANONICAL.fullmatch(token):
+        return None
+    total = 0
+    highest = 0
+    for character in reversed(token):
+        value = _ROMAN_VALUES[character]
+        if value < highest:
+            total -= value
+        else:
+            total += value
+            highest = value
+    return total
+
+
 _NUMERIC_DATE = re.compile(r"(?<!\w)(\d{1,2})[./](\d{1,2})[./](\d{4})(?!\w)")
 _TEXT_DATE = re.compile(
     rf"(?<!\w)(?P<day>\d{{1,2}})\s+(?P<month>{'|'.join(_MONTH_NUMBERS)})\s+"
@@ -214,6 +242,7 @@ def _with_sign(words: str, sign: str | None) -> str:
 
 class NumericNormalizer:
     def normalize(self, text: str) -> str:
+        text = _ROMAN_CENTURY.sub(self._roman_century, text)
         text = _TEXT_DATE.sub(self._text_date, text)
         text = _NUMERIC_DATE.sub(self._numeric_date, text)
         text = _YEAR_CONTEXT.sub(self._year_context, text)
@@ -235,6 +264,13 @@ class NumericNormalizer:
         text = _DECIMAL.sub(self._decimal, text)
         text = _REMAINING_INTEGER.sub(self._remaining_integer, text)
         return text
+
+    def _roman_century(self, match: re.Match[str]) -> str:
+        value = _roman_to_int(match.group("roman"))
+        if value is None:
+            return match.group(0)
+        noun = match.group("noun")
+        return f"{ordinal(value, case=_CENTURY_CASES[noun.casefold()])} {noun}"
 
     def _text_date(self, match: re.Match[str]) -> str:
         day = int(match.group("day"))

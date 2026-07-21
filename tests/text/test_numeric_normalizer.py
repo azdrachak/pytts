@@ -158,6 +158,31 @@ def test_distinguishes_prose_dash_from_numeric_minus(
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
+        ("XX века", "двадцатого века"),
+        ("XXI век", "двадцать первый век"),
+        ("в XIX веке", "в девятнадцатом веке"),
+        ("до середины XX века", "до середины двадцатого века"),
+        ("XVIII веком", "восемнадцатым веком"),
+    ],
+)
+def test_normalizes_roman_centuries(source: str, expected: str) -> None:
+    assert _normalize(source) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "XX съезд",  # roman without a century noun: numeric stage leaves it
+        "IIII века",  # non-canonical roman: left untouched
+    ],
+)
+def test_leaves_non_century_roman_untouched(source: str) -> None:
+    assert _normalize(source) == source
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
         ("39+%", "более тридцати девяти процентов"),
         (
             "рост 39+% в год",
