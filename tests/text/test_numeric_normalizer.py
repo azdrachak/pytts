@@ -197,6 +197,25 @@ def test_normalizes_open_ended_percent(source: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
+        ("19,7%", "девятнадцать целых семь десятых процента"),
+        ("3,5 %", "три целых пять десятых процента"),
+        ("0,1%", "ноль целых одна десятая процента"),
+        (
+            "было всего 19,7%.",
+            "было всего девятнадцать целых семь десятых процента.",
+        ),
+        ("-3,5%", "минус три целых пять десятых процента"),
+        # integer percent stays on its own rule
+        ("15%", "пятнадцать процентов"),
+    ],
+)
+def test_normalizes_decimal_percent(source: str, expected: str) -> None:
+    assert _normalize(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
         ("в 1990-х годах", "в тысяча девятьсот девяностых годах"),
         ("в конце 1970-х", "в конце тысяча девятьсот семидесятых"),
         ("в начале 1980-х", "в начале тысяча девятьсот восьмидесятых"),

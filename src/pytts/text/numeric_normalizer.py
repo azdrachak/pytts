@@ -173,6 +173,10 @@ _CURRENCY_SUFFIX = re.compile(
     rf"(?P<currency>{_CURRENCY_TOKEN})(?!\w)",
     re.IGNORECASE,
 )
+_DECIMAL_PERCENT = re.compile(
+    rf"(?<![\w.,])(?P<sign>{_SIGN})?(?P<integer>{_INTEGER})(?P<separator>[.,])"
+    r"(?P<fraction>\d{1,2})\s*%(?!\w)"
+)
 _PERCENT_PLUS = re.compile(
     rf"(?<![\w.,])(?P<number>{_INTEGER})\s*\+\s*%(?!\w)"
 )
@@ -251,6 +255,7 @@ class NumericNormalizer:
         text = _PERCENT_RANGE.sub(self._percent_range, text)
         text = _CURRENCY_PREFIX.sub(self._currency_amount, text)
         text = _CURRENCY_SUFFIX.sub(self._currency_amount, text)
+        text = _DECIMAL_PERCENT.sub(self._decimal_percent, text)
         text = _PERCENT_PLUS.sub(self._percent_plus, text)
         text = _PERCENT.sub(self._percent, text)
         text = _EXPLICIT_RANGE.sub(self._explicit_range, text)
@@ -322,6 +327,10 @@ class NumericNormalizer:
         forms = ("процент", "процента", "процентов")
         words = f"{cardinal(raw)} {noun_form(value, forms)}"
         return _with_sign(words, match.group("sign"))
+
+    def _decimal_percent(self, match: re.Match[str]) -> str:
+        words = decimal_words(match.group("integer"), match.group("fraction"))
+        return _with_sign(f"{words} процента", match.group("sign"))
 
     def _percent_plus(self, match: re.Match[str]) -> str:
         return f"более {cardinal(match.group('number'), case='g')} процентов"
