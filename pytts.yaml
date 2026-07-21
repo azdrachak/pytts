@@ -22,6 +22,7 @@ abbreviations:
   "табл.": "таблица"
   "обл.": "область"
   "р-н": "район"
+  "х/ф": "художественный фильм"
 
   # letter-spelled Cyrillic initialisms (consonant clusters Silero cannot syllabify)
   "УССР": "уэсэсэр"
@@ -49,6 +50,8 @@ abbreviations:
   "ПВО": "пэвэо"
   "СССР": "эсэсэсэр"
   "ЦРУ": "цэрэу"
+  "ЧМ": "чемпионат мира"
+  "МММ": "эм эм эм"
 
   # units and multipliers (case agreement is approximate by design)
   "млн": "миллионов"
@@ -63,3 +66,4 @@ transliterations:
   "Brent": "Брент"
   "Bloomberg": "Блумберг"
   "New York Times": "Нью-Йорк таймс"
+  "Marahovsky": "Мараховский"
