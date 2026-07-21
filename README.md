@@ -44,6 +44,35 @@ the expected and actual values and explains the deliberate manifest-update proce
 The repeat SHA-256 pass reads the roughly 100 MB model and can add a short startup delay; this is the
 intentional integrity tradeoff for the MVP.
 
+## Shell shortcut
+
+To run `pytts` from any directory, add a wrapper to `~/.zshrc`. It points `--project` at this
+checkout (so the root `pytts.yaml` stays the default config) but keeps your current working
+directory, so relative input paths and the "MP3 next to the input" default keep working. Replace
+`~/Project/pytts` with your checkout path if it differs.
+
+```zsh
+echo 'tts() { uv run --project ~/Project/pytts pytts "$@"; }' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Then, from anywhere:
+
+```zsh
+tts ~/Downloads/article.pdf                  # → ~/Downloads/article.mp3
+tts article.md --voice baya --speed fast     # flags pass straight through
+tts article.pdf -o /tmp/out.mp3 --force
+tts --list-voices
+```
+
+The first run downloads the model once and needs network; later runs work offline. To bake in a
+default voice or speed while still allowing a per-call override, put the option before `"$@"` (the
+last value wins, so `tts a.md --voice xenia` still overrides it):
+
+```zsh
+tts() { uv run --project ~/Project/pytts pytts --voice baya --speed slow "$@"; }
+```
+
 ## Pronunciation configuration
 
 The root `pytts.yaml` is versioned and editable:
