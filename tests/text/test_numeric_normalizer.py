@@ -106,6 +106,36 @@ def test_numeric_normalization_is_idempotent() -> None:
     assert _normalize(once) == once
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("X5 Group", "икс пять Group"),
+        ("FPV5", "эф пи ви пять"),
+        ("F16 и F-16", "эф шестнадцать и эф шестнадцать"),
+    ],
+)
+def test_normalizes_joined_uppercase_letter_number_codes(
+    source: str, expected: str
+) -> None:
+    assert _normalize(source) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["preX5", "X5post", "_X5", "X5_", "x5"],
+)
+def test_joined_codes_require_whole_word_boundaries_and_uppercase(
+    source: str,
+) -> None:
+    assert _normalize(source) == source
+
+
+def test_joined_code_normalization_is_idempotent() -> None:
+    once = _normalize("X5 и FPV5")
+
+    assert _normalize(once) == once
+
+
 @pytest.mark.parametrize("sign", ["-", "−"])
 @pytest.mark.parametrize(
     ("source_template", "expected"),

@@ -76,6 +76,9 @@ _YEAR_CONTEXT = re.compile(
 _CODE = re.compile(
     rf"(?<!\w)(?P<letters>[A-Z]{{1,5}}|[А-ЯЁ])-(?P<number>{_INTEGER})(?!\w)"
 )
+_ALNUM_CODE = re.compile(
+    r"(?<!\w)(?P<letters>[A-Z]{1,5})(?P<number>\d+)(?!\w)"
+)
 _COMPOUND_YEARS = re.compile(
     rf"(?<!\w)(?P<number>{_INTEGER})-(?P<suffix>летн[а-яё]*)(?!\w)",
     re.IGNORECASE,
@@ -261,6 +264,7 @@ class NumericNormalizer:
         text = _EXPLICIT_RANGE.sub(self._explicit_range, text)
         text = _BARE_RANGE.sub(self._bare_range, text)
         text = _CODE.sub(self._code, text)
+        text = _ALNUM_CODE.sub(self._alnum_code, text)
         text = _COMPOUND_YEARS.sub(self._compound_years, text)
         text = _COMPOUND_DOLLARS.sub(self._compound_dollars, text)
         text = _DECADE.sub(self._decade, text)
@@ -346,6 +350,12 @@ class NumericNormalizer:
         return _range_words(match.group("left"), match.group("right"))
 
     def _code(self, match: re.Match[str]) -> str:
+        return (
+            f"{spell_code_letters(match.group('letters'))} "
+            f"{cardinal(match.group('number'))}"
+        )
+
+    def _alnum_code(self, match: re.Match[str]) -> str:
         return (
             f"{spell_code_letters(match.group('letters'))} "
             f"{cardinal(match.group('number'))}"
