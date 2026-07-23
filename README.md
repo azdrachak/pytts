@@ -96,11 +96,18 @@ example `"ув.": ""`) deletes the matched token instead of expanding it, which 
 with no correct spoken form. An explicit `--config` replaces the root config rather than merging
 with it.
 
-Before Silero, pytts converts common dates, years, decades (`1990-х`), Roman-numeral centuries
-(`XX века`), integers, decimals, currencies, percentages, ranges, letter-number codes, and
-documented semantic symbols to Russian words. Mixed-script PDF lookalikes are repaired contextually.
-Any letter or symbol Silero cannot voice is dropped rather than aborting the run, and a single
-warning lists each removed character with its surrounding context so you can find it in the source.
+Before Silero, pytts removes scheme/`www` URLs and bare URLs that contain a path, query, or
+fragment. Ambiguous host-only tokens such as `main.py` and `example.com` are preserved rather than
+silently discarded. It converts common dates, years, decades (`1990-х`), Roman-numeral centuries
+(`XX века`), integers, decimals, currencies, percentages, ranges, hyphenated and joined
+letter-number codes, and documented semantic symbols to Russian words. `~` and `≈` are read as
+`примерно`; `->` and `→` become a colon pause. One or two stars at a text-block boundary are treated
+as formatting. Mixed-script PDF lookalikes are repaired contextually, and residual Latin `x` is
+mapped mechanically to `кс`.
+
+Any remaining emoji after exact `transliterations` are removed silently as decoration. Any other
+letter or symbol Silero cannot voice is dropped rather than aborting the run, and a single warning
+lists each removed character with its surrounding context so you can find it in the source.
 
 ## Output and errors
 
@@ -113,11 +120,13 @@ output. Exit codes are 2 for usage, 3 for input/config/output-path validation, 4
 
 - Russian only. Low Cyrillic content emits a warning but is not blocked; there is no language
   validation.
-- General foreign-word transliteration is approximate; use `transliterations` for exact names.
+- General foreign-word transliteration is approximate. Residual Latin `x` is mapped mechanically
+  to `кс`, so mixed-case names such as `Xi` may be imperfect; use `transliterations` for exact names.
 - Uppercase Latin groups of 1–5 letters are spelled by letter names, so `NASA` is read as
   `эн эй эс эй`; override it in `transliterations` when word-like pronunciation is preferred.
-- Greek and other non-Cyrillic letters, emoji, and unknown semantic symbols are dropped with a
-  warning (character plus context) unless an exact `transliterations` replacement makes them speakable.
+- Emoji left after exact `transliterations` are silently removed as decoration. Greek and other
+  non-Cyrillic letters and unknown semantic symbols are dropped with a warning containing the
+  character and context.
 - Numeric shapes `DD.MM.YYYY` and `DD/MM/YYYY` are always treated as calendar dates. Version-like
   triples require an exact replacement or source rewrite; invalid calendar dates fail closed.
 - Context rules cover the documented dates, years, currency, ranges and two compound-adjective
@@ -131,7 +140,9 @@ output. Exit codes are 2 for usage, 3 for input/config/output-path validation, 4
 - PDF headings are a font-size heuristic; uniform browser-print typography gets paragraph pauses.
 - Input is limited to articles, not books or other long-form document workflows.
 - Speech chunks contain at most 448 clean text characters.
-- URLs, code, images, metadata, tables, footnotes, and raw HTML are discarded as non-article content.
+- Scheme/`www` URLs and bare URLs with a path, query, or fragment are discarded as non-article
+  content. Ambiguous host-only tokens are preserved and may be transliterated into speech. Code
+  blocks, images, metadata, tables, footnotes, and raw HTML remain discarded by the readers.
 - Context-sensitive abbreviation gender and morphology are outside this release.
 
 ## Model license

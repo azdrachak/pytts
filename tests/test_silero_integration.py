@@ -41,11 +41,15 @@ def test_real_model_synthesizes_valid_mp3(tmp_path: Path) -> None:
 
     info = MP3(output).info
     assert info.sample_rate == 48000
+    assert info.channels == 1
     assert 90000 <= info.bitrate <= 100000
     assert info.length > 0.5
 
 
-@pytest.mark.parametrize("fixture_name", ["smoke.md", "pronunciation.md"])
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["smoke.md", "pronunciation.md", "article_artifacts.md"],
+)
 def test_real_cli_synthesizes_fixture_to_valid_mp3(
     tmp_path: Path, fixture_name: str
 ) -> None:
@@ -63,5 +67,6 @@ def test_real_cli_synthesizes_fixture_to_valid_mp3(
     assert result.returncode == 0, result.stderr
     info = MP3(output).info
     assert info.sample_rate == 48000
+    assert info.channels == 1
     assert 90000 <= info.bitrate <= 100000
     assert info.length > 0.5
