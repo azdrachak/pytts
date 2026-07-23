@@ -64,11 +64,11 @@ def _warning(text: str) -> str | None:
 def clean_article(article: Article) -> CleaningResult:
     blocks: list[TextBlock] = []
     for block in article.blocks:
-        without_urls = _URL.sub(_remove_url, block.text)
+        without_artifacts = _remove_technical_artifacts(block.text)
+        without_urls = _URL.sub(_remove_url, without_artifacts)
         normalized = unicodedata.normalize("NFC", without_urls)
         repaired = repair_mixed_scripts(normalized)
-        without_artifacts = _remove_technical_artifacts(repaired)
-        text = _SPACE.sub(" ", without_artifacts).strip()
+        text = _SPACE.sub(" ", repaired).strip()
         if text:
             blocks.append(TextBlock(kind=block.kind, text=text))
     if not blocks:

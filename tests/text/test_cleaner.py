@@ -119,6 +119,22 @@ def test_removes_mixed_case_scheme_and_www_urls(url: str) -> None:
     assert result.article.blocks[0].text == "Текст ."
 
 
+@pytest.mark.parametrize(
+    "url",
+    (
+        "example.com\u200b/path",
+        "example.\u2060com/path",
+        "exam\u00adple.com/path",
+        "example.\ufeffcom/path",
+        "exam\x00ple.com/path",
+    ),
+)
+def test_removes_bare_url_split_by_technical_artifact(url: str) -> None:
+    result = clean_article(_article(f"До {url} после."))
+
+    assert result.article.blocks[0].text == "До после."
+
+
 def test_preserves_ambiguous_host_only_tokens_and_filenames() -> None:
     source = "Откройте main.py, README.md, config.yaml, index.html и example.com."
 
