@@ -8,15 +8,27 @@ from pytts.errors import InputError
 from pytts.text.confusables import repair_mixed_scripts
 
 _URL = re.compile(
-    r"(?i)(?<![\w@])(?:"
-    r"(?:https?://|www\.)[^\s<>]+"
-    r"|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
-    r"[a-z]{2,}(?:[/?#][^\s<>]*)"
+    r"(?<![\w@])(?:"
+    r"(?ai:https?://|www\.)[^\s<>]+"
+    r"|(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
+    r"[A-Za-z]{2,}(?:[/?#][^\s<>]*)"
     r")"
 )
 _URL_TRAILING_PUNCTUATION = frozenset(".,;:!?…)]}»”’\"'")
 _SPACE = re.compile(r"\s+")
 _TECHNICAL_UNICODE = frozenset("\u00ad\u200b\u2060\ufeff")
+
+
+def _normalize_nfc_preserving_ascii_membership(text: str) -> str:
+    parts: list[str] = []
+    boundary = 0
+    for index, character in enumerate(text):
+        if not character.isascii() and unicodedata.normalize("NFC", character).isascii():
+            parts.append(unicodedata.normalize("NFC", text[boundary:index]))
+            parts.append(character)
+            boundary = index + 1
+    parts.append(unicodedata.normalize("NFC", text[boundary:]))
+    return "".join(parts)
 
 
 def _remove_url(match: re.Match[str]) -> str:
@@ -56,7 +68,7 @@ def _warning(text: str) -> str | None:
 def clean_article(article: Article) -> CleaningResult:
     blocks: list[TextBlock] = []
     for block in article.blocks:
-        normalized = unicodedata.normalize("NFC", block.text)
+        normalized = _normalize_nfc_preserving_ascii_membership(block.text)
         repaired = repair_mixed_scripts(normalized)
         without_artifacts = _remove_technical_artifacts(repaired)
         text = _SPACE.sub(" ", _URL.sub(_remove_url, without_artifacts)).strip()

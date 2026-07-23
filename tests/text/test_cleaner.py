@@ -94,6 +94,15 @@ def test_does_not_remove_email_decimal_or_embedded_domain_like_text() -> None:
     assert result.article.blocks[0].text == source
 
 
+@pytest.mark.parametrize("unicode_letter", ("İ", "ı", "ſ", "K"))
+def test_preserves_non_ascii_hostname_like_text(unicode_letter: str) -> None:
+    source = f"Текст exa{unicode_letter}ple.com/path здесь."
+
+    result = clean_article(_article(source))
+
+    assert result.article.blocks[0].text == source
+
+
 def test_distinguishes_local_path_from_hostname_with_trailing_path() -> None:
     source = "Файлы src/main.py и report.csv/v2 здесь."
 

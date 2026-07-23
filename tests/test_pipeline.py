@@ -16,6 +16,7 @@ from pytts.pipeline import (
     ProgressStage,
 )
 from pytts.readers.input import InputReader
+from pytts.text.cleaner import clean_article
 from pytts.tts import VoiceSelection
 
 
@@ -178,6 +179,10 @@ def test_article_artifact_fixture_leaves_only_censored_star_warning(
     events: list[ProgressEvent] = []
     runtime = FakeRuntime()
     source = Path(__file__).parent / "fixtures" / "article_artifacts.md"
+    cleaned = clean_article(InputReader().read(source))
+    cleaned_text = " ".join(block.text for block in cleaned.article.blocks)
+    assert "sponsr.ru/crimsonanalytics/126423" not in cleaned_text.casefold()
+
     pipeline = _pipeline(
         tmp_path,
         runtime,

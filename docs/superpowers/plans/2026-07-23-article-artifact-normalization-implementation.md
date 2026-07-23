@@ -54,7 +54,8 @@
 - Modify: `tests/text/test_cleaner.py:17-61`
 
 **Interfaces:**
-- Consumes: block text after NFC normalization, mixed-script repair, and technical-character removal.
+- Consumes: block text after NFC normalization that preserves whether hostname
+  characters were originally ASCII, mixed-script repair, and technical-character removal.
 - Produces: `_remove_url(match: re.Match[str]) -> str`, returning only punctuation trimmed from the URL candidate.
 - Preserves: `clean_article(article: Article) -> CleaningResult`.
 
@@ -126,15 +127,27 @@ Replace `_URL` in `src/pytts/text/cleaner.py` and add the callback:
 
 ```python
 _URL = re.compile(
-    r"(?i)(?<![\w@])(?:"
-    r"(?:https?://|www\.)[^\s<>]+"
-    r"|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
-    r"[a-z]{2,}(?:[/?#][^\s<>]*)"
+    r"(?<![\w@])(?:"
+    r"(?ai:https?://|www\.)[^\s<>]+"
+    r"|(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
+    r"[A-Za-z]{2,}(?:[/?#][^\s<>]*)"
     r")"
 )
 _URL_TRAILING_PUNCTUATION = frozenset(".,;:!?…)]}»”’\"'")
 _SPACE = re.compile(r"\s+")
 _TECHNICAL_UNICODE = frozenset("\u00ad\u200b\u2060\ufeff")
+
+
+def _normalize_nfc_preserving_ascii_membership(text: str) -> str:
+    parts: list[str] = []
+    boundary = 0
+    for index, character in enumerate(text):
+        if not character.isascii() and unicodedata.normalize("NFC", character).isascii():
+            parts.append(unicodedata.normalize("NFC", text[boundary:index]))
+            parts.append(character)
+            boundary = index + 1
+    parts.append(unicodedata.normalize("NFC", text[boundary:]))
+    return "".join(parts)
 
 
 def _remove_url(match: re.Match[str]) -> str:
@@ -154,9 +167,12 @@ Change the substitution in `clean_article` to use the callback:
 text = _SPACE.sub(" ", _URL.sub(_remove_url, without_artifacts)).strip()
 ```
 
-The scheme/`www` branch deliberately accepts host-only URLs. The bare branch
-requires `/`, `?`, or `#` immediately after the ASCII hostname, which is the
-fail-open distinction between `example.com/path` and `main.py`.
+The scheme/`www` branch deliberately accepts host-only URLs and scopes
+case-insensitivity to its ASCII prefix. The bare branch uses explicit ASCII
+classes and requires `/`, `?`, or `#` immediately after the hostname, which is
+the fail-open distinction between `example.com/path` and `main.py`. The NFC
+helper preserves originally non-ASCII characters such as `K` when their
+canonical form would otherwise enter the ASCII hostname alphabet.
 
 - [ ] **Step 4: Run focused and reader regression tests**
 
@@ -558,6 +574,7 @@ from pytts.pipeline import (
     ProgressStage,
 )
 from pytts.readers.input import InputReader
+from pytts.text.cleaner import clean_article
 ```
 
 Widen the existing `_pipeline` helper argument without changing its behavior:
@@ -575,6 +592,10 @@ def test_article_artifact_fixture_leaves_only_censored_star_warning(
     events: list[ProgressEvent] = []
     runtime = FakeRuntime()
     source = Path(__file__).parent / "fixtures" / "article_artifacts.md"
+    cleaned = clean_article(InputReader().read(source))
+    cleaned_text = " ".join(block.text for block in cleaned.article.blocks)
+    assert "sponsr.ru/crimsonanalytics/126423" not in cleaned_text.casefold()
+
     pipeline = _pipeline(
         tmp_path,
         runtime,
