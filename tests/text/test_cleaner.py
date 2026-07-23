@@ -1,3 +1,4 @@
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,19 @@ def test_repairs_safari_mixed_script_artifacts_during_cleanup() -> None:
     result = clean_article(_article("ĸиевсĸий текст и FР-5."))
 
     assert result.article.blocks[0].text == "киевский текст и FP-5."
+
+
+def test_normalizes_kelvin_sign_before_mixed_script_repair() -> None:
+    result = clean_article(_article("Kиевский текст."))
+
+    assert result.article.blocks[0].text == "Киевский текст."
+
+
+def test_retained_output_is_nfc_normalized() -> None:
+    result = clean_article(_article("Первый текст;"))
+
+    assert result.article.blocks[0].text == "Первый текст;"
+    assert unicodedata.is_normalized("NFC", result.article.blocks[0].text)
 
 
 def test_rejects_article_containing_only_technical_artifacts() -> None:
@@ -78,6 +92,33 @@ def test_removes_all_url_forms_but_preserves_trailing_punctuation(
     assert clean_article(_article(source)).article.blocks[0].text == expected
 
 
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://example.com/path",
+        "www.example.com/path",
+        "example.com/path",
+    ),
+)
+def test_preserves_canonical_trailing_semicolon_after_urls(url: str) -> None:
+    result = clean_article(_article(f"Текст {url};"))
+
+    assert result.article.blocks[0].text == "Текст ;"
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "HtTpS://Example.COM/Path",
+        "WwW.Example.COM/Path",
+    ),
+)
+def test_removes_mixed_case_scheme_and_www_urls(url: str) -> None:
+    result = clean_article(_article(f"Текст {url}."))
+
+    assert result.article.blocks[0].text == "Текст ."
+
+
 def test_preserves_ambiguous_host_only_tokens_and_filenames() -> None:
     source = "Откройте main.py, README.md, config.yaml, index.html и example.com."
 
@@ -94,13 +135,26 @@ def test_does_not_remove_email_decimal_or_embedded_domain_like_text() -> None:
     assert result.article.blocks[0].text == source
 
 
-@pytest.mark.parametrize("unicode_letter", ("İ", "ı", "ſ", "K"))
-def test_preserves_non_ascii_hostname_like_text(unicode_letter: str) -> None:
+@pytest.mark.parametrize(
+    ("unicode_letter", "normalized_letter"),
+    (("İ", "İ"), ("ı", "ı"), ("ſ", "ſ"), ("K", "K")),
+)
+def test_preserves_non_ascii_hostname_like_text(
+    unicode_letter: str, normalized_letter: str
+) -> None:
     source = f"Текст exa{unicode_letter}ple.com/path здесь."
 
     result = clean_article(_article(source))
 
-    assert result.article.blocks[0].text == source
+    assert result.article.blocks[0].text == (
+        f"Текст exa{normalized_letter}ple.com/path здесь."
+    )
+
+
+def test_preserves_url_like_suffix_after_combining_mark() -> None:
+    result = clean_article(_article("и\u0306example.com/path"))
+
+    assert result.article.blocks[0].text == "йexample.com/path"
 
 
 def test_distinguishes_local_path_from_hostname_with_trailing_path() -> None:

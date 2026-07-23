@@ -19,22 +19,18 @@ _SPACE = re.compile(r"\s+")
 _TECHNICAL_UNICODE = frozenset("\u00ad\u200b\u2060\ufeff")
 
 
-def _normalize_nfc_preserving_ascii_membership(text: str) -> str:
-    parts: list[str] = []
-    boundary = 0
-    for index, character in enumerate(text):
-        if not character.isascii() and unicodedata.normalize("NFC", character).isascii():
-            parts.append(unicodedata.normalize("NFC", text[boundary:index]))
-            parts.append(character)
-            boundary = index + 1
-    parts.append(unicodedata.normalize("NFC", text[boundary:]))
-    return "".join(parts)
-
-
 def _remove_url(match: re.Match[str]) -> str:
     candidate = match.group(0)
+    if match.start() > 0:
+        previous = match.string[match.start() - 1]
+        if unicodedata.category(previous).startswith("M"):
+            return candidate
     boundary = len(candidate)
-    while boundary > 0 and candidate[boundary - 1] in _URL_TRAILING_PUNCTUATION:
+    while (
+        boundary > 0
+        and unicodedata.normalize("NFC", candidate[boundary - 1])
+        in _URL_TRAILING_PUNCTUATION
+    ):
         boundary -= 1
     return candidate[boundary:]
 
@@ -68,10 +64,11 @@ def _warning(text: str) -> str | None:
 def clean_article(article: Article) -> CleaningResult:
     blocks: list[TextBlock] = []
     for block in article.blocks:
-        normalized = _normalize_nfc_preserving_ascii_membership(block.text)
+        without_urls = _URL.sub(_remove_url, block.text)
+        normalized = unicodedata.normalize("NFC", without_urls)
         repaired = repair_mixed_scripts(normalized)
         without_artifacts = _remove_technical_artifacts(repaired)
-        text = _SPACE.sub(" ", _URL.sub(_remove_url, without_artifacts)).strip()
+        text = _SPACE.sub(" ", without_artifacts).strip()
         if text:
             blocks.append(TextBlock(kind=block.kind, text=text))
     if not blocks:

@@ -54,8 +54,8 @@
 - Modify: `tests/text/test_cleaner.py:17-61`
 
 **Interfaces:**
-- Consumes: block text after NFC normalization that preserves whether hostname
-  characters were originally ASCII, mixed-script repair, and technical-character removal.
+- Consumes: original block text so bare-host eligibility reflects original
+  ASCII membership before ordinary NFC normalization.
 - Produces: `_remove_url(match: re.Match[str]) -> str`, returning only punctuation trimmed from the URL candidate.
 - Preserves: `clean_article(article: Article) -> CleaningResult`.
 
@@ -138,41 +138,41 @@ _SPACE = re.compile(r"\s+")
 _TECHNICAL_UNICODE = frozenset("\u00ad\u200b\u2060\ufeff")
 
 
-def _normalize_nfc_preserving_ascii_membership(text: str) -> str:
-    parts: list[str] = []
-    boundary = 0
-    for index, character in enumerate(text):
-        if not character.isascii() and unicodedata.normalize("NFC", character).isascii():
-            parts.append(unicodedata.normalize("NFC", text[boundary:index]))
-            parts.append(character)
-            boundary = index + 1
-    parts.append(unicodedata.normalize("NFC", text[boundary:]))
-    return "".join(parts)
-
-
 def _remove_url(match: re.Match[str]) -> str:
     candidate = match.group(0)
+    if match.start() > 0:
+        previous = match.string[match.start() - 1]
+        if unicodedata.category(previous).startswith("M"):
+            return candidate
     boundary = len(candidate)
     while (
         boundary > 0
-        and candidate[boundary - 1] in _URL_TRAILING_PUNCTUATION
+        and unicodedata.normalize("NFC", candidate[boundary - 1])
+        in _URL_TRAILING_PUNCTUATION
     ):
         boundary -= 1
     return candidate[boundary:]
 ```
 
-Change the substitution in `clean_article` to use the callback:
+Determine URL removability on original text, then normalize all retained text
+before mixed-script repair and technical cleanup:
 
 ```python
-text = _SPACE.sub(" ", _URL.sub(_remove_url, without_artifacts)).strip()
+without_urls = _URL.sub(_remove_url, block.text)
+normalized = unicodedata.normalize("NFC", without_urls)
+repaired = repair_mixed_scripts(normalized)
+without_artifacts = _remove_technical_artifacts(repaired)
+text = _SPACE.sub(" ", without_artifacts).strip()
 ```
 
 The scheme/`www` branch deliberately accepts host-only URLs and scopes
 case-insensitivity to its ASCII prefix. The bare branch uses explicit ASCII
 classes and requires `/`, `?`, or `#` immediately after the hostname, which is
-the fail-open distinction between `example.com/path` and `main.py`. The NFC
-helper preserves originally non-ASCII characters such as `K` when their
-canonical form would otherwise enter the ASCII hostname alphabet.
+the fail-open distinction between `example.com/path` and `main.py`. Checking
+the original representation preserves that distinction for non-ASCII
+characters whose NFC form is ASCII. The callback also treats a preceding
+combining mark as a word boundary blocker and recognizes trailing punctuation
+through its canonical NFC form before the retained text is normalized.
 
 - [ ] **Step 4: Run focused and reader regression tests**
 
@@ -864,6 +864,8 @@ required = (
 for path in paths:
     article = InputReader().read(path)
     cleaned = clean_article(article)
+    cleaned_text = "\n".join(block.text for block in cleaned.article.blocks)
+    assert "sponsr.ru/crimsonanalytics/126423" not in cleaned_text.casefold(), path
     expanded = AbbreviationExpander(config.abbreviations).expand_article(
         cleaned.article
     )
@@ -879,7 +881,6 @@ for path in paths:
     assert result.warning.count("'*' near") == 3, (path, result.warning)
     for fragment in required:
         assert fragment in text, (path, fragment)
-    assert "sponsr.ru/crimsonanalytics/126423" not in text.casefold(), path
     assert "🎮" not in text, path
     print(f"{path.name}: {result.warning}")
 PY
