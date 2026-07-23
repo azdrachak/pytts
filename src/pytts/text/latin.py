@@ -139,11 +139,12 @@ def _latin_replacement(match: re.Match[str]) -> str:
     if ascii_token.isupper() and len(ascii_token) <= 5:
         return spell_latin_letters(ascii_token)
     try:
-        return cyrtranslit.to_cyrillic(ascii_token, "ru")
+        transliterated = cyrtranslit.to_cyrillic(ascii_token, "ru")
     except (KeyboardInterrupt, SystemExit):
         raise
     except Exception as error:
         raise InputError(f"Could not transliterate Latin token {token!r}: {error}") from error
+    return transliterated.replace("X", "Кс").replace("x", "кс")
 
 
 def normalize_latin(text: str) -> str:

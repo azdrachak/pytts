@@ -41,6 +41,31 @@ def test_transliterates_words_but_spells_short_caps() -> None:
     assert normalize_latin("Brent NASA UNESCO") == "Брент эн эй эс эй УНЕСКО"
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("Petroxi", "Петрокси"),
+        ("tax", "такс"),
+        ("Interfax", "Интерфакс"),
+        ("Xerox", "Ксерокс"),
+    ],
+)
+def test_repairs_residual_x_after_cyrtranslit(
+    source: str, expected: str
+) -> None:
+    assert normalize_latin(source) == expected
+
+
+def test_preserves_uppercase_x_spelling_and_documents_mixed_case_fallback() -> None:
+    assert normalize_latin("X Xi") == "икс Кси"
+
+
+def test_residual_x_repair_is_idempotent() -> None:
+    once = normalize_latin("Petroxi и Interfax")
+
+    assert normalize_latin(once) == once
+
+
 def test_normalization_is_idempotent() -> None:
     once = normalize_latin("Brent FPV")
     assert normalize_latin(once) == once
