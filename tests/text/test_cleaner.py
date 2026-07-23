@@ -59,3 +59,44 @@ def test_warns_but_returns_text_for_non_russian_content(
 def test_rejects_article_empty_after_cleanup() -> None:
     with pytest.raises(InputError, match="no readable text"):
         clean_article(_article("https://example.com"))
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("Текст (https://example.com/path).", "Текст ()."),
+        ("Текст [www.example.com/path],", "Текст [],"),
+        ("Текст «sponsr.ru/path».", "Текст «»."),
+        ("Текст example.com?q=1!", "Текст !"),
+        ("Текст example.com#section?", "Текст ?"),
+        ("Текст https://example.com/path…", "Текст …"),
+    ],
+)
+def test_removes_all_url_forms_but_preserves_trailing_punctuation(
+    source: str, expected: str
+) -> None:
+    assert clean_article(_article(source)).article.blocks[0].text == expected
+
+
+def test_preserves_ambiguous_host_only_tokens_and_filenames() -> None:
+    source = "Откройте main.py, README.md, config.yaml, index.html и example.com."
+
+    result = clean_article(_article(source))
+
+    assert result.article.blocks[0].text == source
+
+
+def test_does_not_remove_email_decimal_or_embedded_domain_like_text() -> None:
+    source = "Пишите user@example.com/path; версия 3.14; токен token_example.com/path."
+
+    result = clean_article(_article(source))
+
+    assert result.article.blocks[0].text == source
+
+
+def test_distinguishes_local_path_from_hostname_with_trailing_path() -> None:
+    source = "Файлы src/main.py и report.csv/v2 здесь."
+
+    result = clean_article(_article(source))
+
+    assert result.article.blocks[0].text == "Файлы src/main.py и здесь."
