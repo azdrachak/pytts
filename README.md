@@ -98,16 +98,18 @@ with it.
 
 Before Silero, pytts removes scheme/`www` URLs and bare URLs that contain a path, query, or
 fragment. Ambiguous host-only tokens such as `main.py` and `example.com` are preserved rather than
-silently discarded. It converts common dates, years, decades (`1990-х`), Roman-numeral centuries
+silently discarded. After exact `transliterations`, any remaining emoji are silently removed as
+decoration before numeric normalization. It then converts common dates, years, decades (`1990-х`),
+Roman-numeral centuries
 (`XX века`), integers, decimals, currencies, percentages, ranges, hyphenated and joined
 letter-number codes, and documented semantic symbols to Russian words. `~` and `≈` are read as
 `примерно`; `->` and `→` become a colon pause. One or two stars at a text-block boundary are treated
 as formatting. Mixed-script PDF lookalikes are repaired contextually, and residual Latin `x` is
 mapped mechanically to `кс`.
 
-Any remaining emoji after exact `transliterations` are removed silently as decoration. Any other
-letter or symbol Silero cannot voice is dropped rather than aborting the run, and a single warning
-lists each removed character with its surrounding context so you can find it in the source.
+Any other letter or symbol Silero cannot voice is dropped rather than aborting the run, and a
+single warning lists each removed character with its surrounding context so you can find it in the
+source.
 
 ## Output and errors
 
