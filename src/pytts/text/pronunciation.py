@@ -103,8 +103,8 @@ class PronunciationNormalizer:
         notices: list[str] = []
         for block in article.blocks:
             text = self._overrides.apply(block.text)
-            text = self._numbers.normalize(text)
             text = emoji.replace_emoji(text, replace="")
+            text = self._numbers.normalize(text)
             text = _strip_boundary_stars(text)
             text = _normalize_symbols(text)
             text = normalize_latin(text)

@@ -15,8 +15,8 @@
 - Remove scheme and `www` URLs, but remove a bare ASCII hostname only when it has a path, query, or fragment.
 - Preserve ambiguous host-only tokens such as `main.py`, `README.md`, `config.yaml`, `index.html`, and `example.com`.
 - All URL branches preserve trailing `.`, `,`, `;`, `:`, `!`, `?`, `…`, `)`, `]`, `}` and closing quotes consistently.
-- User `transliterations` run before numeric, emoji, symbol, Latin, and final guard rules.
-- Emoji left after user overrides are deleted silently as decoration; the `emoji` package must not perform network access at runtime.
+- User `transliterations` run before emoji, numeric, symbol, Latin, and final guard rules.
+- Emoji left after user overrides are deleted silently as decoration before numeric normalization; the `emoji` package must not perform network access at runtime.
 - Remove only one or two stars at a block boundary. Three or more stars and interior mathematical stars continue through the warning guard.
 - Joined codes match exactly `(?<!\w)[A-Z]{1,5}\d+(?!\w)` and run before `_REMAINING_INTEGER`.
 - The final guard remains warn-and-strip for unsupported semantic content; do not add new exit codes or error classes.
@@ -398,9 +398,9 @@ git commit -m "fix: pronounce residual latin x"
 - Modify: `tests/test_pipeline.py:9-13,74-115`
 
 **Interfaces:**
-- Consumes: text after user overrides and numeric normalization.
+- Consumes: text after user overrides and before numeric normalization.
 - Produces: `_strip_boundary_stars(text: str) -> str`.
-- Uses: `emoji.replace_emoji(text, replace="")` before any star rule.
+- Uses: `emoji.replace_emoji(text, replace="")` before numeric normalization and any star rule.
 - Preserves: `PronunciationNormalizer.normalize_article(article) -> NormalizationResult`.
 - Guarantees: an all-emoji article still raises the existing `InputError`; unknown non-emoji symbols still generate warning notices.
 
@@ -501,6 +501,15 @@ def test_emoji_removal_precedes_boundary_star_cleanup() -> None:
     assert result.warning is None
 
 
+def test_removes_digit_keycap_emoji_without_warning() -> None:
+    result = PronunciationNormalizer({}).normalize_article(
+        _article("До 1️⃣ после.")
+    )
+
+    assert result.article.blocks[0].text == "До после."
+    assert result.warning is None
+
+
 def test_transliteration_override_can_pronounce_emoji_before_removal() -> None:
     assert _normalize("🎮", {"🎮": "игра"}) == "игра"
 
@@ -508,6 +517,11 @@ def test_transliteration_override_can_pronounce_emoji_before_removal() -> None:
 def test_rejects_article_containing_only_unmapped_emoji() -> None:
     with pytest.raises(InputError, match="No speakable text remains"):
         PronunciationNormalizer({}).normalize_article(_article("🎮 👨‍👩‍👧‍👦"))
+
+
+def test_rejects_article_containing_only_digit_keycap_emoji() -> None:
+    with pytest.raises(InputError, match="No speakable text remains"):
+        PronunciationNormalizer({}).normalize_article(_article("1️⃣"))
 ```
 
 - [ ] **Step 2: Add the failing cross-module fixture contract**
@@ -674,8 +688,8 @@ Change the per-block body of `normalize_article` to this exact order:
 
 ```python
 text = self._overrides.apply(block.text)
-text = self._numbers.normalize(text)
 text = emoji.replace_emoji(text, replace="")
+text = self._numbers.normalize(text)
 text = _strip_boundary_stars(text)
 text = _normalize_symbols(text)
 text = normalize_latin(text)
@@ -684,8 +698,9 @@ notices.extend(block_notices)
 text = _SPACE.sub(" ", text).strip()
 ```
 
-Emoji removal must precede boundary stars so `*️⃣` is removed as one emoji
-sequence. Overrides must remain first so `{"🎮": "игра"}` wins over deletion.
+Emoji removal must precede numeric normalization and boundary stars so digit
+keycap `1️⃣` and star keycap `*️⃣` are each removed as one emoji sequence.
+Overrides must remain first so `{"🎮": "игра"}` wins over deletion.
 The approximation expression handles a single `~` and `≈` but intentionally
 leaves `~~` for the final warning guard. Its intended article case is a
 prefix such as `~28`; an infix form such as `5~10` is outside the range

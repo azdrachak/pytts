@@ -160,6 +160,15 @@ def test_emoji_removal_precedes_boundary_star_cleanup() -> None:
     assert result.warning is None
 
 
+def test_removes_digit_keycap_emoji_without_warning() -> None:
+    result = PronunciationNormalizer({}).normalize_article(
+        _article("До 1️⃣ после.")
+    )
+
+    assert result.article.blocks[0].text == "До после."
+    assert result.warning is None
+
+
 def test_transliteration_override_can_pronounce_emoji_before_removal() -> None:
     assert _normalize("🎮", {"🎮": "игра"}) == "игра"
 
@@ -167,6 +176,11 @@ def test_transliteration_override_can_pronounce_emoji_before_removal() -> None:
 def test_rejects_article_containing_only_unmapped_emoji() -> None:
     with pytest.raises(InputError, match="No speakable text remains"):
         PronunciationNormalizer({}).normalize_article(_article("🎮 👨‍👩‍👧‍👦"))
+
+
+def test_rejects_article_containing_only_digit_keycap_emoji() -> None:
+    with pytest.raises(InputError, match="No speakable text remains"):
+        PronunciationNormalizer({}).normalize_article(_article("1️⃣"))
 
 
 def test_preserves_blocks_and_is_idempotent() -> None:
