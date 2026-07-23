@@ -141,6 +141,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a2/55/8f8cab2afd404cf578136ef2cc5dfb50baa1761b68c9da1fb1e4eed343c9/docopt-0.6.2.tar.gz", hash = "sha256:49b3a825280bd66b3aa83585ef59c4a8c82f2c8a522dbe754a8bc8d08c85c491", size = 25901, upload-time = "2014-06-16T11:18:57.406Z" }
 
 [[package]]
+name = "emoji"
+version = "2.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/78/0d2db9382c92a163d7095fc08efff7800880f830a152cfced40161e7638d/emoji-2.15.0.tar.gz", hash = "sha256:eae4ab7d86456a70a00a985125a03263a5eac54cd55e51d7e184b1ed3b6757e4", size = 615483, upload-time = "2025-09-21T12:13:02.755Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/5e/4b5aaaabddfacfe36ba7768817bd1f71a7a810a43705e531f3ae4c690767/emoji-2.15.0-py3-none-any.whl", hash = "sha256:205296793d66a89d88af4688fa57fd6496732eb48917a87175a023c8138995eb", size = 608433, upload-time = "2025-09-21T12:13:01.197Z" },
+]
+
+[[package]]
 name = "filelock"
 version = "3.31.0"
 source = { registry = "https://pypi.org/simple" }
@@ -516,6 +525,7 @@ source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "cyrtranslit" },
+    { name = "emoji" },
     { name = "lameenc" },
     { name = "markdown-it-py" },
     { name = "num2words" },
@@ -539,6 +549,7 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.2,<9" },
     { name = "cyrtranslit", specifier = ">=1.2,<2" },
+    { name = "emoji", specifier = ">=2,<3" },
     { name = "lameenc" },
     { name = "markdown-it-py" },
     { name = "num2words", specifier = ">=0.5.14,<0.6" },

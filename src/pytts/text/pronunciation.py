@@ -5,6 +5,8 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+import emoji
+
 from pytts.domain import Article, TextBlock
 from pytts.errors import InputError
 from pytts.text.latin import TransliterationOverrides, normalize_latin
@@ -14,6 +16,10 @@ _CONTEXT = 20
 
 _SPACE = re.compile(r"\s+")
 _SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+([,.;:!?])")
+_LEADING_BOUNDARY_STARS = re.compile(r"^\s*\*{1,2}(?!\*)\s*")
+_TRAILING_BOUNDARY_STARS = re.compile(r"\s*(?<!\*)\*{1,2}\s*$")
+# Approximation is mechanical and position-independent; infix 5~10 is not a range.
+_APPROXIMATION = re.compile(r"(?<!~)~(?!~)|≈")
 _SYMBOL_WORDS = {
     "×": "умножить на",
     "÷": "разделить на",
@@ -36,7 +42,14 @@ _ALLOWED_PUNCTUATION = frozenset(
 )
 
 
+def _strip_boundary_stars(text: str) -> str:
+    text = _LEADING_BOUNDARY_STARS.sub("", text)
+    return _TRAILING_BOUNDARY_STARS.sub("", text)
+
+
 def _normalize_symbols(text: str) -> str:
+    text = text.replace("->", " : ").replace("→", " : ")
+    text = _APPROXIMATION.sub(" примерно ", text)
     text = re.sub(r"#(?=\s*\d)", " номер ", text)
     text = re.sub(r"#(?=\s*[A-Za-zА-Яа-яЁё])", " хештег ", text)
     for symbol, words in _SYMBOL_WORDS.items():
@@ -91,6 +104,8 @@ class PronunciationNormalizer:
         for block in article.blocks:
             text = self._overrides.apply(block.text)
             text = self._numbers.normalize(text)
+            text = emoji.replace_emoji(text, replace="")
+            text = _strip_boundary_stars(text)
             text = _normalize_symbols(text)
             text = normalize_latin(text)
             text, block_notices = _strip_unspeakable(text)

@@ -9,7 +9,13 @@ import torch
 from pytts.domain import Article, BlockKind, ConversionRequest, TextBlock
 from pytts.errors import InputError, SynthesisError
 from pytts.model_store import ModelSpec
-from pytts.pipeline import ConversionPipeline, ProgressEvent, ProgressStage
+from pytts.pipeline import (
+    ArticleReader,
+    ConversionPipeline,
+    ProgressEvent,
+    ProgressStage,
+)
+from pytts.readers.input import InputReader
 from pytts.tts import VoiceSelection
 
 
@@ -77,7 +83,7 @@ def _pipeline(
     events: list[ProgressEvent],
     writers: list[FakeWriter],
     *,
-    reader: FakeInputReader | None = None,
+    reader: ArticleReader | None = None,
     runtime_calls: list[object] | None = None,
     max_text_chars: int = 800,
 ) -> ConversionPipeline:
@@ -164,6 +170,57 @@ def test_normalizes_after_abbreviations_and_before_chunking(tmp_path: Path) -> N
     assert "две тысячи двадцать шестом году" in combined
     assert "Брент вырос на пятнадцать процентов" in combined
     assert not any(character.isdigit() for character in combined)
+
+
+def test_article_artifact_fixture_leaves_only_censored_star_warning(
+    tmp_path: Path,
+) -> None:
+    events: list[ProgressEvent] = []
+    runtime = FakeRuntime()
+    source = Path(__file__).parent / "fixtures" / "article_artifacts.md"
+    pipeline = _pipeline(
+        tmp_path,
+        runtime,
+        events,
+        [],
+        reader=InputReader(),
+    )
+
+    pipeline.convert(
+        ConversionRequest(
+            source,
+            output_path=tmp_path / "article_artifacts.mp3",
+        )
+    )
+
+    combined = " ".join(runtime.chunks)
+    for fragment in (
+        "Данная информация",
+        "Данный документ не является рекомендацией",
+        "примерно двадцать восемь миллиардов",
+        "примерно двадцать пять процентов",
+        "Петрокси Традинг",
+        "виндфалл такс",
+        "икс пять Гроуп",
+        "Интерфакс",
+        "маин.пи",
+        "конфиг.ямл",
+    ):
+        assert fragment in combined
+    assert "sponsr" not in combined.casefold()
+    assert not any(character.isdigit() for character in combined)
+    assert all(emoji not in combined for emoji in ("🎮", "*️⃣", "👨‍👩‍👧‍👦"))
+
+    warnings = [
+        event.message
+        for event in events
+        if event.warning
+        and event.message is not None
+        and event.message.startswith("Removed ")
+    ]
+    assert len(warnings) == 1
+    assert warnings[0].startswith("Removed 3 unsupported character(s)")
+    assert warnings[0].count("'*' near") == 3
 
 
 def test_normalization_failure_precedes_model_and_writer(tmp_path: Path) -> None:

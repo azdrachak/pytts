@@ -11,6 +11,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "click>=8.2,<9",
   "cyrtranslit>=1.2,<2",
+  "emoji>=2,<3",
   "lameenc",
   "markdown-it-py",
   "num2words>=0.5.14,<0.6",
