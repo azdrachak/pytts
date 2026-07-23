@@ -23,7 +23,7 @@
 - Do not change ambiguous decade suffixes `-е`/`-м`, decimals with three or more fractional digits, Silero voices, speed, chunking, or MP3 encoding.
 - Do not commit the two supplied article files from `/Users/azdrachek/Downloads`.
 - Preserve the user-owned untracked `.DS_Store`; stage only files named by each task.
-- Follow RED/GREEN TDD for every production behavior and retain the current non-Silero baseline of 364 passing tests.
+- Follow RED/GREEN TDD for every production behavior and keep the existing non-Silero suite regression-free while adding the new coverage.
 
 ---
 
@@ -94,6 +94,14 @@ def test_does_not_remove_email_decimal_or_embedded_domain_like_text() -> None:
     result = clean_article(_article(source))
 
     assert result.article.blocks[0].text == source
+
+
+def test_distinguishes_local_path_from_hostname_with_trailing_path() -> None:
+    source = "Файлы src/main.py и report.csv/v2 здесь."
+
+    result = clean_article(_article(source))
+
+    assert result.article.blocks[0].text == "Файлы src/main.py и здесь."
 ```
 
 Keep `test_rejects_article_empty_after_cleanup`: a scheme URL without a path,
@@ -275,7 +283,7 @@ decimal-percentage, and idempotence tests.
 
 ```bash
 git add src/pytts/text/numeric_normalizer.py tests/text/test_numeric_normalizer.py
-git commit -m "fix: pronounce joined letter number codes"
+git commit -m "fix: pronounce joined letter-number codes"
 ```
 
 ---
@@ -441,10 +449,19 @@ def test_strips_one_or_two_stars_only_at_block_boundaries(
     assert _normalize(source) == expected
 
 
-def test_triple_boundary_stars_remain_visible_to_warning_guard() -> None:
-    result = PronunciationNormalizer({}).normalize_article(_article("***бать"))
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("***бать", "бать"),
+        ("слово***", "слово"),
+    ],
+)
+def test_triple_boundary_stars_remain_visible_to_warning_guard(
+    source: str, expected: str
+) -> None:
+    result = PronunciationNormalizer({}).normalize_article(_article(source))
 
-    assert result.article.blocks[0].text == "бать"
+    assert result.article.blocks[0].text == expected
     assert result.warning is not None
     assert result.warning.startswith("Removed 3 unsupported character(s)")
     assert result.warning.count("'*' near") == 3
@@ -627,6 +644,7 @@ _SPACE = re.compile(r"\s+")
 _SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+([,.;:!?])")
 _LEADING_BOUNDARY_STARS = re.compile(r"^\s*\*{1,2}(?!\*)\s*")
 _TRAILING_BOUNDARY_STARS = re.compile(r"\s*(?<!\*)\*{1,2}\s*$")
+# Approximation is mechanical and position-independent; infix 5~10 is not a range.
 _APPROXIMATION = re.compile(r"(?<!~)~(?!~)|≈")
 ```
 
@@ -669,7 +687,9 @@ text = _SPACE.sub(" ", text).strip()
 Emoji removal must precede boundary stars so `*️⃣` is removed as one emoji
 sequence. Overrides must remain first so `{"🎮": "игра"}` wins over deletion.
 The approximation expression handles a single `~` and `≈` but intentionally
-leaves `~~` for the final warning guard.
+leaves `~~` for the final warning guard. Its intended article case is a
+prefix such as `~28`; an infix form such as `5~10` is outside the range
+contract and is read mechanically as «пять примерно десять».
 
 - [ ] **Step 6: Run focused, fixture, and full non-Silero regressions**
 
