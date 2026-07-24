@@ -101,11 +101,13 @@ fragment. Ambiguous host-only tokens such as `main.py` and `example.com` are pre
 silently discarded. After exact `transliterations`, any remaining emoji are silently removed as
 decoration before numeric normalization. It then converts common dates, years, decades (`1990-х`),
 Roman-numeral centuries
-(`XX века`), integers, decimals, currencies, percentages, ranges, hyphenated and joined
-letter-number codes, and documented semantic symbols to Russian words. `~` and `≈` are read as
-`примерно`; `->` and `→` become a colon pause. One or two stars at a text-block boundary are treated
-as formatting. Mixed-script PDF lookalikes are repaired contextually. A standalone lowercase `x`
-is read as `икс`, while residual intraword Latin `x` is mapped mechanically to `кс`.
+(`XX века`), integers, decimals, currencies, percentages, ranges, hyphenated, joined, and dotted
+uppercase letter-number codes, and documented semantic symbols to Russian words. Dotted codes
+shaped like `V.629S` are read by letter names and a cardinal number:
+`ви шестьсот двадцать девять эс`; the dot acts only as a structural separator. `~` and `≈` are read
+as `примерно`; `->` and `→` become a colon pause. One or two stars at a text-block boundary are
+treated as formatting. Mixed-script PDF lookalikes are repaired contextually. A standalone
+lowercase `x` is read as `икс`, while residual intraword Latin `x` is mapped mechanically to `кс`.
 
 Any other letter or symbol Silero cannot voice is dropped rather than aborting the run, and a
 single warning lists each removed character with its surrounding context so you can find it in the
