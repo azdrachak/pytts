@@ -38,6 +38,21 @@ def test_repairs_safari_mixed_script_artifacts_during_cleanup() -> None:
     assert result.article.blocks[0].text == "киевский текст и FP-5."
 
 
+@pytest.mark.parametrize(
+    "hostname",
+    (
+        "exаmple.com/path",  # Cyrillic а
+        "exaKple.com/path",
+    ),
+)
+def test_removes_bare_url_after_normalizing_hostname_confusables(
+    hostname: str,
+) -> None:
+    result = clean_article(_article(f"Смотри {hostname} тут."))
+
+    assert result.article.blocks[0].text == "Смотри тут."
+
+
 def test_normalizes_kelvin_sign_before_mixed_script_repair() -> None:
     result = clean_article(_article("Kиевский текст."))
 
@@ -153,7 +168,7 @@ def test_does_not_remove_email_decimal_or_embedded_domain_like_text() -> None:
 
 @pytest.mark.parametrize(
     ("unicode_letter", "normalized_letter"),
-    (("İ", "İ"), ("ı", "ı"), ("ſ", "ſ"), ("K", "K")),
+    (("İ", "İ"), ("ı", "ı"), ("ſ", "ſ")),
 )
 def test_preserves_non_ascii_hostname_like_text(
     unicode_letter: str, normalized_letter: str

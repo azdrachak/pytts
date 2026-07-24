@@ -54,8 +54,8 @@
 - Modify: `tests/text/test_cleaner.py:17-61`
 
 **Interfaces:**
-- Consumes: original block text so bare-host eligibility reflects original
-  ASCII membership before ordinary NFC normalization.
+- Consumes: block text after technical-artifact removal, NFC normalization,
+  and mixed-script repair.
 - Produces: `_remove_url(match: re.Match[str]) -> str`, returning only punctuation trimmed from the URL candidate.
 - Preserves: `clean_article(article: Article) -> CleaningResult`.
 
@@ -145,37 +145,33 @@ def _remove_url(match: re.Match[str]) -> str:
         if unicodedata.category(previous).startswith("M"):
             return candidate
     boundary = len(candidate)
-    while (
-        boundary > 0
-        and unicodedata.normalize("NFC", candidate[boundary - 1])
-        in _URL_TRAILING_PUNCTUATION
-    ):
+    while boundary > 0 and candidate[boundary - 1] in _URL_TRAILING_PUNCTUATION:
         boundary -= 1
     return candidate[boundary:]
 ```
 
 Remove non-semantic technical artifacts from the original representation,
-determine URL removability, then normalize all retained text before
-mixed-script repair:
+normalize retained text, repair mixed-script artifacts, and then determine URL
+removability:
 
 ```python
 without_artifacts = _remove_technical_artifacts(block.text)
-without_urls = _URL.sub(_remove_url, without_artifacts)
-normalized = unicodedata.normalize("NFC", without_urls)
+normalized = unicodedata.normalize("NFC", without_artifacts)
 repaired = repair_mixed_scripts(normalized)
-text = _SPACE.sub(" ", repaired).strip()
+without_urls = _URL.sub(_remove_url, repaired)
+text = _SPACE.sub(" ", without_urls).strip()
 ```
 
 The scheme/`www` branch deliberately accepts host-only URLs and scopes
 case-insensitivity to its ASCII prefix. The bare branch uses explicit ASCII
 classes and requires `/`, `?`, or `#` immediately after the hostname, which is
-the fail-open distinction between `example.com/path` and `main.py`. Checking
-the original meaningful characters—after removing only explicitly
-non-semantic technical artifacts—preserves that distinction for non-ASCII
-characters whose NFC form is ASCII while preventing artifacts from splitting
-an otherwise removable URL. The callback also treats a preceding combining
-mark as a word boundary blocker and recognizes trailing punctuation through
-its canonical NFC form before the retained text is normalized.
+the fail-open distinction between `example.com/path` and `main.py`. Technical
+artifacts are removed before matching so they cannot split a URL. NFC and
+mixed-script repair also precede matching so Safari confusables such as a
+Cyrillic `а` inside an otherwise Latin hostname are repaired before the ASCII
+bare-URL rule is applied. The callback treats a preceding combining mark as a
+word boundary blocker; candidates are already NFC-normalized when trailing
+punctuation is trimmed.
 
 - [ ] **Step 4: Run focused and reader regression tests**
 
@@ -314,8 +310,9 @@ git commit -m "fix: pronounce joined letter-number codes"
 - Modify: `tests/text/test_latin.py:40-51`
 
 **Interfaces:**
-- Consumes: the string returned by `cyrtranslit.to_cyrillic(ascii_token, "ru")`.
-- Produces: every residual ASCII `x` as `кс` and `X` as `Кс`.
+- Consumes: a Latin token before `cyrtranslit`, followed by its transliterated result.
+- Produces: standalone lowercase `x` as `икс`; residual intraword ASCII `x` as
+  `кс` and `X` as `Кс`.
 - Preserves: the early 1–5 uppercase acronym path, so standalone `X` remains `икс`.
 
 - [ ] **Step 1: Write failing residual-x tests**
@@ -342,6 +339,10 @@ def test_preserves_uppercase_x_spelling_and_documents_mixed_case_fallback() -> N
     assert normalize_latin("X Xi") == "икс Кси"
 
 
+def test_spells_standalone_lowercase_x_as_letter_name() -> None:
+    assert normalize_latin("по оси x") == "по оси икс"
+
+
 def test_residual_x_repair_is_idempotent() -> None:
     once = normalize_latin("Petroxi и Interfax")
 
@@ -357,8 +358,8 @@ uv run pytest tests/text/test_latin.py -k "residual_x or mixed_case" -v
 ```
 
 Expected: `cyrtranslit` leaves ASCII `x`/`X` in the returned words, so the exact
-Russian expectations fail; standalone uppercase `X` already remains correctly
-spelled as `икс`.
+Russian expectations fail; standalone lowercase `x` is still read as `кс`,
+while uppercase `X` already remains correctly spelled as `икс`.
 
 - [ ] **Step 3: Repair only the transliteration result**
 
@@ -370,6 +371,8 @@ def _latin_replacement(match: re.Match[str]) -> str:
     if not all(_is_latin_letter(character) for character in token):
         return token
     ascii_token = _ascii_latin(token)
+    if ascii_token == "x":
+        return spell_latin_letters("X")
     if ascii_token.isupper() and len(ascii_token) <= 5:
         return spell_latin_letters(ascii_token)
     try:
@@ -381,9 +384,10 @@ def _latin_replacement(match: re.Match[str]) -> str:
     return transliterated.replace("X", "Кс").replace("x", "кс")
 ```
 
-The replacement is intentionally after the acronym branch. It is mechanical,
-so names such as `Xi` use the documented approximate `Кси` reading unless the
-user provides a `transliterations` entry.
+The standalone lowercase `x` branch mirrors the existing uppercase letter-name
+reading. Intraword replacement remains after the acronym branch and is
+mechanical, so names such as `Xi` use the documented approximate `Кси` reading
+unless the user provides a `transliterations` entry.
 
 - [ ] **Step 4: Run Latin and pronunciation regressions**
 
@@ -804,8 +808,8 @@ silently discarded. It converts common dates, years, decades (`1990-х`), Roman-
 (`XX века`), integers, decimals, currencies, percentages, ranges, hyphenated and joined
 letter-number codes, and documented semantic symbols to Russian words. `~` and `≈` are read as
 `примерно`; `->` and `→` become a colon pause. One or two stars at a text-block boundary are treated
-as formatting. Mixed-script PDF lookalikes are repaired contextually, and residual Latin `x` is
-mapped mechanically to `кс`.
+as formatting. Mixed-script PDF lookalikes are repaired contextually. A standalone lowercase `x`
+is read as `икс`, while residual intraword Latin `x` is mapped mechanically to `кс`.
 
 Any remaining emoji after exact `transliterations` are removed silently as decoration. Any other
 letter or symbol Silero cannot voice is dropped rather than aborting the run, and a single warning
@@ -816,8 +820,9 @@ Replace the current known-limitation bullets about approximate foreign words
 and warning behavior with:
 
 ```markdown
-- General foreign-word transliteration is approximate. Residual Latin `x` is mapped mechanically
-  to `кс`, so mixed-case names such as `Xi` may be imperfect; use `transliterations` for exact names.
+- General foreign-word transliteration is approximate. A standalone lowercase `x` is read as
+  `икс`; residual intraword Latin `x` is mapped mechanically to `кс`, so mixed-case names such as
+  `Xi` may be imperfect. Use `transliterations` for exact names.
 - Uppercase Latin groups of 1–5 letters are spelled by letter names, so `NASA` is read as
   `эн эй эс эй`; override it in `transliterations` when word-like pronunciation is preferred.
 - Emoji left after exact `transliterations` are silently removed as decoration. Greek and other

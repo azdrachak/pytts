@@ -28,8 +28,7 @@ def _remove_url(match: re.Match[str]) -> str:
     boundary = len(candidate)
     while (
         boundary > 0
-        and unicodedata.normalize("NFC", candidate[boundary - 1])
-        in _URL_TRAILING_PUNCTUATION
+        and candidate[boundary - 1] in _URL_TRAILING_PUNCTUATION
     ):
         boundary -= 1
     return candidate[boundary:]
@@ -65,10 +64,10 @@ def clean_article(article: Article) -> CleaningResult:
     blocks: list[TextBlock] = []
     for block in article.blocks:
         without_artifacts = _remove_technical_artifacts(block.text)
-        without_urls = _URL.sub(_remove_url, without_artifacts)
-        normalized = unicodedata.normalize("NFC", without_urls)
+        normalized = unicodedata.normalize("NFC", without_artifacts)
         repaired = repair_mixed_scripts(normalized)
-        text = _SPACE.sub(" ", repaired).strip()
+        without_urls = _URL.sub(_remove_url, repaired)
+        text = _SPACE.sub(" ", without_urls).strip()
         if text:
             blocks.append(TextBlock(kind=block.kind, text=text))
     if not blocks:

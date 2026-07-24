@@ -104,8 +104,8 @@ Roman-numeral centuries
 (`XX века`), integers, decimals, currencies, percentages, ranges, hyphenated and joined
 letter-number codes, and documented semantic symbols to Russian words. `~` and `≈` are read as
 `примерно`; `->` and `→` become a colon pause. One or two stars at a text-block boundary are treated
-as formatting. Mixed-script PDF lookalikes are repaired contextually, and residual Latin `x` is
-mapped mechanically to `кс`.
+as formatting. Mixed-script PDF lookalikes are repaired contextually. A standalone lowercase `x`
+is read as `икс`, while residual intraword Latin `x` is mapped mechanically to `кс`.
 
 Any other letter or symbol Silero cannot voice is dropped rather than aborting the run, and a
 single warning lists each removed character with its surrounding context so you can find it in the
@@ -122,8 +122,9 @@ output. Exit codes are 2 for usage, 3 for input/config/output-path validation, 4
 
 - Russian only. Low Cyrillic content emits a warning but is not blocked; there is no language
   validation.
-- General foreign-word transliteration is approximate. Residual Latin `x` is mapped mechanically
-  to `кс`, so mixed-case names such as `Xi` may be imperfect; use `transliterations` for exact names.
+- General foreign-word transliteration is approximate. A standalone lowercase `x` is read as
+  `икс`; residual intraword Latin `x` is mapped mechanically to `кс`, so mixed-case names such as
+  `Xi` may be imperfect. Use `transliterations` for exact names.
 - Uppercase Latin groups of 1–5 letters are spelled by letter names, so `NASA` is read as
   `эн эй эс эй`; override it in `transliterations` when word-like pronunciation is preferred.
 - Emoji left after exact `transliterations` are silently removed as decoration. Greek and other

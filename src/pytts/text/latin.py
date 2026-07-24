@@ -136,6 +136,8 @@ def _latin_replacement(match: re.Match[str]) -> str:
     if not all(_is_latin_letter(character) for character in token):
         return token
     ascii_token = _ascii_latin(token)
+    if ascii_token == "x":
+        return spell_latin_letters("X")
     if ascii_token.isupper() and len(ascii_token) <= 5:
         return spell_latin_letters(ascii_token)
     try:

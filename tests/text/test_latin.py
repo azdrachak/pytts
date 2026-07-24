@@ -60,6 +60,10 @@ def test_preserves_uppercase_x_spelling_and_documents_mixed_case_fallback() -> N
     assert normalize_latin("X Xi") == "икс Кси"
 
 
+def test_spells_standalone_lowercase_x_as_letter_name() -> None:
+    assert normalize_latin("по оси x") == "по оси икс"
+
+
 def test_residual_x_repair_is_idempotent() -> None:
     once = normalize_latin("Petroxi и Interfax")
 
