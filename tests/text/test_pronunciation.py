@@ -24,6 +24,39 @@ def test_applies_override_then_numbers_then_remaining_latin() -> None:
     assert result == "Брент и Блумберг: эф шестнадцать стоил пять долларов."
 
 
+def test_normalizes_dotted_code_before_latin_and_warning_guard() -> None:
+    result = PronunciationNormalizer({}).normalize_article(
+        _article("Судно VSL MEDKON MIRA V.629S будет перенаправлено.")
+    )
+
+    spoken = result.article.blocks[0].text
+    assert "ви шестьсот двадцать девять эс" in spoken
+    assert not any(character.isdigit() for character in spoken)
+    assert result.warning is None
+
+
+def test_override_can_replace_dotted_code_before_builtin_rule() -> None:
+    assert _normalize(
+        "Судно V.629S.",
+        {"V.629S": "рейс южного направления"},
+    ) == "Судно рейс южного направления."
+
+
+@pytest.mark.parametrize("source", ["ABCDEF.1S", "V.1ABCDEF"])
+def test_overlong_dotted_code_groups_remain_visible_to_warning_guard(
+    source: str,
+) -> None:
+    result = PronunciationNormalizer({}).normalize_article(_article(source))
+
+    assert not any(
+        character.isdigit()
+        for block in result.article.blocks
+        for character in block.text
+    )
+    assert result.warning is not None
+    assert result.warning.count("'1' near") == 1
+
+
 def test_expands_semantic_symbols() -> None:
     assert _normalize("№ 5, 2 × 3 = 6, ±5, 7‰, § 2, А + Б & В") == (
         "номер пять, два умножить на три равно шесть, плюс-минус пять, "

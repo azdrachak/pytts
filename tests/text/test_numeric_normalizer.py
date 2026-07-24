@@ -136,6 +136,51 @@ def test_joined_code_normalization_is_idempotent() -> None:
     assert _normalize(once) == once
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("A.1B", "эй один би"),
+        ("V.629S", "ви шестьсот двадцать девять эс"),
+        ("AB.12CD", "эй би двенадцать си ди"),
+        (
+            "ABCDE.12ABCDE",
+            "эй би си ди и двенадцать эй би си ди и",
+        ),
+    ],
+)
+def test_normalizes_dotted_uppercase_letter_number_codes(
+    source: str, expected: str
+) -> None:
+    assert _normalize(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("preV.629S", "preV.629S"),
+        ("V.629Spost", "V.629Spost"),
+        ("_V.629S", "_V.629S"),
+        ("V.629S_", "V.629S_"),
+        ("ABCDEF.1S", "ABCDEF.1S"),
+        ("V.1ABCDEF", "V.1ABCDEF"),
+        ("629S", "629S"),
+        ("v.629S", "v.629S"),
+        ("V.629s", "V.629s"),
+        ("V.629", "V.шестьсот двадцать девять"),
+    ],
+)
+def test_dotted_codes_require_supported_groups_and_whole_word_boundaries(
+    source: str, expected: str
+) -> None:
+    assert _normalize(source) == expected
+
+
+def test_dotted_code_normalization_is_idempotent() -> None:
+    once = _normalize("V.629S и AB.12CD")
+
+    assert _normalize(once) == once
+
+
 @pytest.mark.parametrize("sign", ["-", "−"])
 @pytest.mark.parametrize(
     ("source_template", "expected"),

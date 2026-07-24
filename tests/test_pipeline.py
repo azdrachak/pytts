@@ -173,6 +173,36 @@ def test_normalizes_after_abbreviations_and_before_chunking(tmp_path: Path) -> N
     assert not any(character.isdigit() for character in combined)
 
 
+def test_dotted_code_reaches_synthesis_without_unsupported_warning(
+    tmp_path: Path,
+) -> None:
+    events: list[ProgressEvent] = []
+    runtime = FakeRuntime()
+    pipeline = _pipeline(
+        tmp_path,
+        runtime,
+        events,
+        [],
+        reader=FakeInputReader(
+            "Судно VSL MEDKON MIRA V.629S будет перенаправлено."
+        ),
+    )
+    source = tmp_path / "article.md"
+    source.write_text("ignored by fake", encoding="utf-8")
+
+    pipeline.convert(ConversionRequest(source))
+
+    combined = " ".join(runtime.chunks)
+    assert "ви шестьсот двадцать девять эс" in combined
+    assert not any(character.isdigit() for character in combined)
+    assert not any(
+        event.warning
+        and event.message is not None
+        and event.message.startswith("Removed ")
+        for event in events
+    )
+
+
 def test_article_artifact_fixture_leaves_only_censored_star_warning(
     tmp_path: Path,
 ) -> None:

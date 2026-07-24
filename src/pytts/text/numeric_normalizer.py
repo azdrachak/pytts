@@ -73,6 +73,10 @@ _YEAR_CONTEXT = re.compile(
     r"(?P<noun>год|года|году)(?!\w)",
     re.IGNORECASE,
 )
+_DOTTED_ALNUM_CODE = re.compile(
+    r"(?<!\w)(?P<letters>[A-Z]{1,5})\.(?P<number>\d+)"
+    r"(?P<suffix>[A-Z]{1,5})(?!\w)"
+)
 _CODE = re.compile(
     rf"(?<!\w)(?P<letters>[A-Z]{{1,5}}|[А-ЯЁ])-(?P<number>{_INTEGER})(?!\w)"
 )
@@ -263,8 +267,9 @@ class NumericNormalizer:
         text = _PERCENT.sub(self._percent, text)
         text = _EXPLICIT_RANGE.sub(self._explicit_range, text)
         text = _BARE_RANGE.sub(self._bare_range, text)
+        text = _DOTTED_ALNUM_CODE.sub(self._code, text)
         text = _CODE.sub(self._code, text)
-        text = _ALNUM_CODE.sub(self._alnum_code, text)
+        text = _ALNUM_CODE.sub(self._code, text)
         text = _COMPOUND_YEARS.sub(self._compound_years, text)
         text = _COMPOUND_DOLLARS.sub(self._compound_dollars, text)
         text = _DECADE.sub(self._decade, text)
@@ -350,16 +355,14 @@ class NumericNormalizer:
         return _range_words(match.group("left"), match.group("right"))
 
     def _code(self, match: re.Match[str]) -> str:
-        return (
-            f"{spell_code_letters(match.group('letters'))} "
-            f"{cardinal(match.group('number'))}"
-        )
-
-    def _alnum_code(self, match: re.Match[str]) -> str:
-        return (
-            f"{spell_code_letters(match.group('letters'))} "
-            f"{cardinal(match.group('number'))}"
-        )
+        pieces = [
+            spell_code_letters(match.group("letters")),
+            cardinal(match.group("number")),
+        ]
+        suffix = match.groupdict().get("suffix")
+        if suffix is not None:
+            pieces.append(spell_code_letters(suffix))
+        return " ".join(pieces)
 
     def _compound_years(self, match: re.Match[str]) -> str:
         prefix = cardinal(match.group("number"), case="g").replace(" ", "")
