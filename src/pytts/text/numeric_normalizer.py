@@ -74,7 +74,7 @@ _YEAR_CONTEXT = re.compile(
     re.IGNORECASE,
 )
 _DOTTED_ALNUM_CODE = re.compile(
-    r"(?<!\w)(?P<letters>[A-Z]{1,5})\.(?P<number>\d+)"
+    r"(?<!\w)(?P<letters>[A-Z]{1,5})\.(?P<number>[0-9]+)"
     r"(?P<suffix>[A-Z]{1,5})(?!\w)"
 )
 _CODE = re.compile(

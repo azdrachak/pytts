@@ -35,6 +35,14 @@ def test_normalizes_dotted_code_before_latin_and_warning_guard() -> None:
     assert result.warning is None
 
 
+def test_dotted_code_with_non_ascii_digits_remains_visible_to_warning_guard() -> None:
+    result = PronunciationNormalizer({}).normalize_article(_article("V.١٢S"))
+
+    assert result.warning is not None
+    assert "'١' near" in result.warning
+    assert "'٢' near" in result.warning
+
+
 def test_override_can_replace_dotted_code_before_builtin_rule() -> None:
     assert _normalize(
         "Судно V.629S.",

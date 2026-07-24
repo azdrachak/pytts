@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Work only on `codex/dotted-code-normalization`; do not implement on `master`.
-- Match only whole tokens shaped as `(?<!\w)[A-Z]{1,5}\.\d+[A-Z]{1,5}(?!\w)`.
+- Match only whole tokens shaped as `(?<!\w)[A-Z]{1,5}\.[0-9]+[A-Z]{1,5}(?!\w)`.
 - Read `V.629S` as `ви шестьсот двадцать девять эс`; do not interpret `V.` as `рейс` and do not speak the dot.
 - Preserve the existing priority of user `transliterations` over built-in normalization.
 - Keep `V.629`, `629S`, lowercase or mixed-case forms, embedded identifiers, and groups longer than five letters outside the new rule.
@@ -203,7 +203,7 @@ definition unchanged; add only this new definition above it:
 
 ```python
 _DOTTED_ALNUM_CODE = re.compile(
-    r"(?<!\w)(?P<letters>[A-Z]{1,5})\.(?P<number>\d+)"
+    r"(?<!\w)(?P<letters>[A-Z]{1,5})\.(?P<number>[0-9]+)"
     r"(?P<suffix>[A-Z]{1,5})(?!\w)"
 )
 ```
@@ -305,7 +305,7 @@ Do not stage `.DS_Store`.
 **Interfaces:**
 - Consumes: the `NumericNormalizer` behavior delivered by Task 1.
 - Consumes: `InputReader`, `clean_article`, `AbbreviationExpander`, `load_config`, and `PronunciationNormalizer` for text-only acceptance.
-- Produces: a reader-facing README contract for `[A-Z]{1,5}\.\d+[A-Z]{1,5}`.
+- Produces: a reader-facing README contract for `[A-Z]{1,5}\.[0-9]+[A-Z]{1,5}`.
 - Produces: evidence that the supplied article retains `629`, emits no corresponding warning, and contains no digits after normalization.
 
 - [ ] **Step 1: Document the exact dotted-code contract**

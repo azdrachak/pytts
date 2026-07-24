@@ -154,6 +154,10 @@ def test_normalizes_dotted_uppercase_letter_number_codes(
     assert _normalize(source) == expected
 
 
+def test_dotted_codes_require_ascii_digits() -> None:
+    assert _normalize("V.١٢S") == "V.١٢S"
+
+
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
