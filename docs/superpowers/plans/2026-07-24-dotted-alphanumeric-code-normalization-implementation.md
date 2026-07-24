@@ -19,6 +19,7 @@
 - Do not change readers, chunking, Silero, configuration schema, error classes, exit codes, dependencies, `pytts.yaml`, or `uv.lock`.
 - Do not weaken or suppress unsupported-character warnings.
 - Do not commit the user-provided article from `/Users/azdrachek/Downloads`.
+- Treat the supplied-article acceptance as a local, non-CI check; absence of the external file is not a product regression.
 - Preserve and do not stage the unrelated untracked `.DS_Store`.
 
 ## File Map
@@ -163,7 +164,7 @@ def test_dotted_code_reaches_synthesis_without_unsupported_warning(
         ),
     )
     source = tmp_path / "article.md"
-    source.write_text("source", encoding="utf-8")
+    source.write_text("ignored by fake", encoding="utf-8")
 
     pipeline.convert(ConversionRequest(source))
 
@@ -197,15 +198,13 @@ warning because `629` is removed.
 - [ ] **Step 5: Implement the bounded pattern and shared callback**
 
 In `src/pytts/text/numeric_normalizer.py`, insert
-`_DOTTED_ALNUM_CODE` immediately before `_CODE`:
+`_DOTTED_ALNUM_CODE` immediately before `_CODE`. Leave the existing `_CODE`
+definition unchanged; add only this new definition above it:
 
 ```python
 _DOTTED_ALNUM_CODE = re.compile(
     r"(?<!\w)(?P<letters>[A-Z]{1,5})\.(?P<number>\d+)"
     r"(?P<suffix>[A-Z]{1,5})(?!\w)"
-)
-_CODE = re.compile(
-    rf"(?<!\w)(?P<letters>[A-Z]{{1,5}}|[А-ЯЁ])-(?P<number>{_INTEGER})(?!\w)"
 )
 ```
 
@@ -333,9 +332,12 @@ Keep the existing known-limitations list unchanged: the new paragraph already
 states the exact supported shape, and exact exceptions remain configurable via
 `transliterations`.
 
-- [ ] **Step 2: Run text-only acceptance on the supplied article**
+- [ ] **Step 2: Run local-only text acceptance on the supplied article**
 
-Run from the repository root:
+This is a manual, non-CI check because the source file intentionally lives
+outside the repository. Run it from the repository root when the supplied file
+is present. If the file is absent in another environment, record this step as
+skipped rather than treating the absence as a product regression:
 
 ```bash
 uv run python - <<'PY'
@@ -361,13 +363,16 @@ spoken = " ".join(block.text for block in result.article.blocks)
 
 assert "ви шестьсот двадцать девять эс" in spoken
 assert not any(character.isdigit() for character in spoken)
-assert result.warning is None, result.warning
+warning = result.warning or ""
+assert all(f"'{digit}' near" not in warning for digit in "629"), warning
 print("article acceptance passed")
 PY
 ```
 
 Expected: exit code 0 and `article acceptance passed`. The source article
-remains outside the repository and unchanged.
+remains outside the repository and unchanged. An unrelated unsupported glyph
+may still produce a warning without failing this acceptance step; warnings for
+removed `6`, `2`, or `9` fail it.
 
 - [ ] **Step 3: Run the full non-Silero quality gate**
 
