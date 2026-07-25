@@ -41,9 +41,29 @@ _ROMAN_CANONICAL = re.compile(
 # Roman numerals are only resolved before a century noun, where they are
 # unambiguous; a bare "XX" (e.g. "XX съезд") is left for later Latin spelling to
 # avoid misreading Latin words made of Roman letters ("MIX", "DID").
-_CENTURY_CASES = {"век": "n", "века": "g", "веке": "p", "веком": "i"}
+_CENTURY_CASES = {
+    "век": "n",
+    "века": "g",
+    "веку": "d",
+    "веке": "p",
+    "веком": "i",
+    "веках": "p",
+    "столетие": "n",
+    "столетия": "g",
+    "столетию": "d",
+    "столетии": "p",
+    "столетием": "i",
+    "столетиях": "p",
+}
+_CENTURY_NOUN = "|".join(
+    sorted((re.escape(noun) for noun in _CENTURY_CASES), key=len, reverse=True)
+)
+_ROMAN_CENTURY_RANGE = re.compile(
+    rf"(?<!\w)(?P<left>[IVXLCDM]+)(?P<separator>\s*{_DASH}\s*)"
+    rf"(?P<right>[IVXLCDM]+)\s+(?P<noun>{_CENTURY_NOUN})(?!\w)"
+)
 _ROMAN_CENTURY = re.compile(
-    r"(?<!\w)(?P<roman>[IVXLCDM]+)\s+(?P<noun>веком|века|веке|век)(?!\w)"
+    rf"(?<!\w)(?P<roman>[IVXLCDM]+)\s+(?P<noun>{_CENTURY_NOUN})(?!\w)"
 )
 
 
@@ -253,6 +273,7 @@ def _with_sign(words: str, sign: str | None) -> str:
 
 class NumericNormalizer:
     def normalize(self, text: str) -> str:
+        text = _ROMAN_CENTURY_RANGE.sub(self._roman_century_range, text)
         text = _ROMAN_CENTURY.sub(self._roman_century, text)
         text = _TEXT_DATE.sub(self._text_date, text)
         text = _NUMERIC_DATE.sub(self._numeric_date, text)
@@ -285,6 +306,18 @@ class NumericNormalizer:
             return match.group(0)
         noun = match.group("noun")
         return f"{ordinal(value, case=_CENTURY_CASES[noun.casefold()])} {noun}"
+
+    def _roman_century_range(self, match: re.Match[str]) -> str:
+        left = _roman_to_int(match.group("left"))
+        right = _roman_to_int(match.group("right"))
+        if left is None or right is None:
+            return match.group(0)
+        noun = match.group("noun")
+        case = _CENTURY_CASES[noun.casefold()]
+        return (
+            f"{ordinal(left, case=case)}{match.group('separator')}"
+            f"{ordinal(right, case=case)} {noun}"
+        )
 
     def _text_date(self, match: re.Match[str]) -> str:
         day = int(match.group("day"))

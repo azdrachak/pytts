@@ -242,6 +242,11 @@ def test_distinguishes_prose_dash_from_numeric_minus(
         ("в XIX веке", "в девятнадцатом веке"),
         ("до середины XX века", "до середины двадцатого века"),
         ("XVIII веком", "восемнадцатым веком"),
+        (
+            "в XIX-XXI столетиях",
+            "в девятнадцатом-двадцать первом столетиях",
+        ),
+        ("в X-XX веках", "в десятом-двадцатом веках"),
     ],
 )
 def test_normalizes_roman_centuries(source: str, expected: str) -> None:
