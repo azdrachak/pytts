@@ -30,6 +30,7 @@ abbreviations:
   "обл.": "область"
   "р-н": "район"
   "х/ф": "художественный фильм"
+  "з/п": "зарплата"
 
   # letter-spelled Cyrillic initialisms (consonant clusters Silero cannot syllabify)
   "УССР": "уэсэсэр"

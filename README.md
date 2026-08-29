@@ -26,7 +26,7 @@ uv run pytts article.md
 uv run pytts article.pdf --output article.mp3 --voice xenia --speed fast
 uv run pytts article.md --config another.yaml --force
 uv run pytts --list-voices
-uv run --project /Users/azdrachek/Project/pytts pytts /Users/azdrachek/Downloads/article.pdf
+uv run --project /path/to/pytts pytts /path/to/article.pdf
 ```
 
 The first conversion, first `--list-voices`, and first `--voice` validation may download and fully
@@ -46,15 +46,17 @@ intentional integrity tradeoff for the MVP.
 
 ## Shell shortcut
 
-To run `pytts` from any directory, add a wrapper to `~/.zshrc`. It points `--project` at this
-checkout (so the root `pytts.yaml` stays the default config) but keeps your current working
-directory, so relative input paths and the "MP3 next to the input" default keep working. Replace
-`~/Project/pytts` with your checkout path if it differs.
+To run `pytts` from any directory, add the checkout path and a wrapper to `~/.zshrc`. The wrapper
+points `--project` at the checkout (so the root `pytts.yaml` stays the default config) but keeps
+your current working directory, so relative input paths and the "MP3 next to the input" default
+keep working. Replace `/path/to/pytts` with your checkout path.
 
 ```zsh
-echo 'tts() { uv run --project ~/Project/pytts pytts "$@"; }' >> ~/.zshrc
-source ~/.zshrc
+export PYTTS_PROJECT="/path/to/pytts"
+tts() { uv run --project "$PYTTS_PROJECT" pytts "$@"; }
 ```
+
+Reload the shell configuration with `source ~/.zshrc` after saving the changes.
 
 Then, from anywhere:
 
@@ -70,7 +72,7 @@ default voice or speed while still allowing a per-call override, put the option 
 last value wins, so `tts a.md --voice xenia` still overrides it):
 
 ```zsh
-tts() { uv run --project ~/Project/pytts pytts --voice baya --speed slow "$@"; }
+tts() { uv run --project "$PYTTS_PROJECT" pytts --voice baya --speed slow "$@"; }
 ```
 
 ## Pronunciation configuration
